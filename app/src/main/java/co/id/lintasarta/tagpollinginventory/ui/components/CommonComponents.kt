@@ -105,6 +105,7 @@ fun TopBar(
                 actions()
             }
         },
+        windowInsets = WindowInsets(0.dp),
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = TelecomPrimary
         )

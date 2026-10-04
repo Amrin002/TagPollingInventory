@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.SegmentStatusBadge
-import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
@@ -48,77 +46,100 @@ fun SegmentListScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopBar(
-                title = project.name,
-                subtitle = "Segments (${project.segments.size} Total)"
-            )
-        }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(NeutralBackground)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(NeutralBackground)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Compact Header
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = TelecomPrimary,
+            shape = RoundedCornerShape(12.dp)
         ) {
-            // Search Bar & Filter Chips
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+            Row(
+                modifier = Modifier.padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.setSegmentSearchQuery(it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search segments...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                // Filter Chips
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val filterOptions = listOf(
-                        "ALL" to "All",
-                        "IN_PROGRESS" to "In Progress",
-                        "COMPLETED" to "Completed",
-                        "CONFLICT" to "Conflict"
+                Column {
+                    Text(
+                        text = project.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
                     )
+                    Text(
+                        text = "Segments (${project.segments.size} Total)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                }
 
-                    filterOptions.forEach { (key, label) ->
-                        FilterChip(
-                            selected = filter == key,
-                            onClick = { viewModel.setSegmentFilter(key) },
-                            label = { Text(label, fontWeight = if (filter == key) FontWeight.Bold else FontWeight.Normal) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TelecomPrimary,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                    }
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color.White.copy(alpha = 0.2f)
+                ) {
+                    Text(
+                        text = "OFFLINE",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
+        }
 
-            // Segment List
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(filteredSegments) { segment ->
-                    SegmentCard(
-                        segment = segment,
-                        onClick = { onSegmentClick(segment.id) }
+        // Search Bar
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { viewModel.setSegmentSearchQuery(it) },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Search segments...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+
+        // Filter Chips
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val filterOptions = listOf(
+                "ALL" to "All",
+                "IN_PROGRESS" to "In Progress",
+                "COMPLETED" to "Completed",
+                "CONFLICT" to "Conflict"
+            )
+
+            filterOptions.forEach { (key, label) ->
+                FilterChip(
+                    selected = filter == key,
+                    onClick = { viewModel.setSegmentFilter(key) },
+                    label = { Text(label, fontWeight = if (filter == key) FontWeight.Bold else FontWeight.Normal) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = TelecomPrimary,
+                        selectedLabelColor = Color.White
                     )
-                }
+                )
+            }
+        }
+
+        // Segment List
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            items(filteredSegments) { segment ->
+                SegmentCard(
+                    segment = segment,
+                    onClick = { onSegmentClick(segment.id) }
+                )
             }
         }
     }
