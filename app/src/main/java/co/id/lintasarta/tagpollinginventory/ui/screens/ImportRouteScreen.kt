@@ -32,6 +32,7 @@ fun ImportRouteScreen(
 ) {
     val context = LocalContext.current
     val isParsingFile by viewModel.isParsingFile.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -46,7 +47,8 @@ fun ImportRouteScreen(
             TopBar(
                 title = "Import FO Route",
                 subtitle = "Select KML or KMZ File",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->

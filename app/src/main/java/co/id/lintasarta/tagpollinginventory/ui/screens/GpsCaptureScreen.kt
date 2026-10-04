@@ -44,6 +44,7 @@ fun GpsCaptureScreen(
     val currentLocation by viewModel.currentLocation.collectAsState()
     val gpsAccuracy by viewModel.gpsAccuracy.collectAsState()
     val gpsIsStable by viewModel.gpsIsStable.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     var hasPermission by remember { mutableStateOf(viewModel.locationProvider.hasLocationPermission()) }
     var isTreeObstructed by remember { mutableStateOf(false) }
@@ -93,12 +94,19 @@ fun GpsCaptureScreen(
         SimpleDateFormat("dd MMM yyyy — HH:mm:ss", Locale.US).format(Date(currentLocation.timestamp))
     }
 
+    val dynamicProvider = if (networkStatus.isOnline) {
+        "GPS + Cell/WiFi Triangulation (${networkStatus.connectionType})"
+    } else {
+        "GPS Hardware Only (Offline Local)"
+    }
+
     Scaffold(
         topBar = {
             TopBar(
                 title = "GPS Capture",
                 subtitle = draftPole?.id ?: "Target Pole",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
@@ -285,7 +293,7 @@ fun GpsCaptureScreen(
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Provider", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text(currentLocation.providerName, fontWeight = FontWeight.Medium, color = Color.DarkGray)
+                        Text(dynamicProvider, fontWeight = FontWeight.Medium, color = Color.DarkGray, style = MaterialTheme.typography.bodySmall)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

@@ -13,6 +13,8 @@ import co.id.lintasarta.tagpollinginventory.data.repository.RouteRepository
 import co.id.lintasarta.tagpollinginventory.export.ExportEngine
 import co.id.lintasarta.tagpollinginventory.location.LocationData
 import co.id.lintasarta.tagpollinginventory.location.LocationProvider
+import co.id.lintasarta.tagpollinginventory.network.NetworkObserver
+import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.parser.KmlRouteParser
 import co.id.lintasarta.tagpollinginventory.parser.KmzRouteParser
 import co.id.lintasarta.tagpollinginventory.service.RouteDeviationService
@@ -53,6 +55,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val routeRepository = RouteRepository(application)
     private val exportEngine = ExportEngine(application)
     val locationProvider = LocationProvider(application)
+    val networkObserver = NetworkObserver(application)
+    val networkStatus: StateFlow<NetworkStatus> = networkObserver.networkStatus
 
     private val kmlParser = KmlRouteParser()
     private val kmzParser = KmzRouteParser()

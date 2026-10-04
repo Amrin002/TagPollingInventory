@@ -28,10 +28,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
 import co.id.lintasarta.tagpollinginventory.data.model.TagStatus
+import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +40,7 @@ fun TopBar(
     title: String,
     subtitle: String? = null,
     onBackClick: (() -> Unit)? = null,
+    networkStatus: NetworkStatus = NetworkStatus(),
     actions: @Composable RowScope.() -> Unit = {}
 ) {
     TopAppBar(
@@ -77,7 +78,13 @@ fun TopBar(
         },
         actions = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Offline Pill Indicator
+                // Dynamic Online / Offline Pill Indicator
+                val (pillDotColor, pillLabel) = if (networkStatus.isOnline) {
+                    Pair(Color(0xFF4CAF50), "ONLINE (${networkStatus.connectionType})")
+                } else {
+                    Pair(Color(0xFFFF9800), "OFFLINE (Local)")
+                }
+
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color.White.copy(alpha = 0.2f),
@@ -91,11 +98,11 @@ fun TopBar(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFF4CAF50))
+                                .background(pillDotColor)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "OFFLINE",
+                            text = pillLabel,
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -114,12 +121,24 @@ fun TopBar(
 
 @Composable
 fun OfflineStatusCard(
-    modifier: Modifier = Modifier,
-    message: String = "Your field data is stored safely on this device."
+    networkStatus: NetworkStatus = NetworkStatus(),
+    modifier: Modifier = Modifier
 ) {
+    val isOnline = networkStatus.isOnline
+    val containerBg = if (isOnline) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)
+    val statusColor = if (isOnline) Color(0xFF2E7D32) else TelecomOnPrimaryContainer
+    val dotColor = if (isOnline) Color(0xFF4CAF50) else Color(0xFF2E7D32)
+
+    val titleText = if (isOnline) "⚡ Online Mode (${networkStatus.connectionType})" else "● Offline Mode (Local Storage)"
+    val messageText = if (isOnline) {
+        "Connected via ${networkStatus.connectionType}. High precision GPS triangulation & fast tile loading active."
+    } else {
+        "Your field survey data is stored safely in local storage with hardware GPS."
+    }
+
     Card(
         modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+        colors = CardDefaults.cardColors(containerColor = containerBg),
         shape = RoundedCornerShape(12.dp)
     ) {
         Row(
@@ -130,18 +149,18 @@ fun OfflineStatusCard(
                 modifier = Modifier
                     .size(10.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF2E7D32))
+                    .background(dotColor)
             )
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = "● Offline Mode",
+                    text = titleText,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelLarge,
-                    color = TelecomOnPrimaryContainer
+                    color = statusColor
                 )
                 Text(
-                    text = message,
+                    text = messageText,
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFF37474F)
                 )
@@ -360,7 +379,7 @@ fun FieldMapCanvas(
                 style = Stroke(width = 4f, cap = StrokeCap.Round)
             )
 
-            // 3. User Location Blue Circle (Simulated field tech location near pole #19)
+            // 3. User Location Blue Circle
             val userLocationPole = points.find { it.first.id == selectedPoleId } ?: points.getOrNull(18)
             if (userLocationPole != null) {
                 val userOffset = Offset(userLocationPole.second.x - 30f, userLocationPole.second.y + 40f)

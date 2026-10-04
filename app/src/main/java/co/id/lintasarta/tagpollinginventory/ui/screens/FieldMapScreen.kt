@@ -36,6 +36,7 @@ fun FieldMapScreen(
     val realLocation by viewModel.currentLocation.collectAsState()
     val activeRoute by viewModel.activeRoute.collectAsState()
     val routeDeviation by viewModel.routeDeviation.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.startLocationUpdates()
@@ -70,7 +71,8 @@ fun FieldMapScreen(
             TopBar(
                 title = "Field Map",
                 subtitle = "${activeSegment.name} • ${activeSegment.route}",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
@@ -113,16 +115,16 @@ fun FieldMapScreen(
                             Icon(
                                 imageVector = Icons.Default.GpsFixed,
                                 contentDescription = null,
-                                tint = Color(0xFF2E7D32),
+                                tint = if (networkStatus.isOnline) Color(0xFF2E7D32) else Color(0xFFEF6C00),
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = "GPS: ${realLocation.providerName}",
+                                    text = if (networkStatus.isOnline) "GPS + Cell/WiFi (${networkStatus.connectionType})" else "GPS: ${realLocation.providerName}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2E7D32)
+                                    color = if (networkStatus.isOnline) Color(0xFF2E7D32) else Color(0xFFEF6C00)
                                 )
                                 Text(
                                     text = "Accuracy ±${String.format("%.1f", realLocation.accuracy)} m",
@@ -134,14 +136,14 @@ fun FieldMapScreen(
 
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFE3F2FD)
+                            color = if (networkStatus.isOnline) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)
                         ) {
                             Text(
-                                text = "OFFLINE MAP",
+                                text = if (networkStatus.isOnline) "ONLINE MAP" else "OFFLINE MAP",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = TelecomPrimary
+                                color = if (networkStatus.isOnline) Color(0xFF2E7D32) else TelecomPrimary
                             )
                         }
                     }

@@ -35,6 +35,7 @@ fun SegmentDetailScreen(
     val segmentId by viewModel.selectedSegmentId.collectAsState()
     val polesMap by viewModel.poles.collectAsState()
     val targetPoleId by viewModel.targetPoleId.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     val activeSegment = remember(project, segmentId) {
         project.segments.find { it.id == segmentId } ?: project.segments.first()
@@ -49,7 +50,8 @@ fun SegmentDetailScreen(
             TopBar(
                 title = activeSegment.name,
                 subtitle = activeSegment.route,
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->

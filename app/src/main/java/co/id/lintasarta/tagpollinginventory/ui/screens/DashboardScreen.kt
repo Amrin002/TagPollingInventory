@@ -32,6 +32,7 @@ fun DashboardScreen(
     val project by viewModel.project.collectAsState()
     val activeRoute by viewModel.activeRoute.collectAsState()
     val polesMap by viewModel.poles.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     val hasWorkData = activeRoute != null || polesMap.isNotEmpty()
 
@@ -43,7 +44,7 @@ fun DashboardScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // App Title & Headerr
+        // App Title & Header
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -189,8 +190,8 @@ fun DashboardScreen(
             }
         }
 
-        // Offline Status Banner
-        OfflineStatusCard()
+        // Dynamic Online / Offline Status Banner
+        OfflineStatusCard(networkStatus = networkStatus)
 
         // Statistics Grid
         Text(

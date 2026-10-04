@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
@@ -30,6 +29,7 @@ fun ImportPreviewScreen(
     val previewData by viewModel.importPreviewData.collectAsState()
     val project by viewModel.project.collectAsState()
     val segmentId by viewModel.selectedSegmentId.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     val activeSegment = remember(project, segmentId) {
         project.segments.find { it.id == segmentId } ?: project.segments.first()
@@ -50,7 +50,8 @@ fun ImportPreviewScreen(
             TopBar(
                 title = "Import Route Preview",
                 subtitle = previewData?.fileName ?: "File Preview",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
