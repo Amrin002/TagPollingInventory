@@ -1,81 +1,89 @@
-# 📋 Tag Polling Inventory — Handover, Gap Analysis & Enhancement Roadmap
+# 📋 Tag Polling Inventory — Progress Summary, Gap Analysis & Roadmap
 
-**Tanggal Handover:** 04 Oktober 2026  
+**Tanggal Update:** 05 Oktober 2026  
 **Project:** Mobile Survey & Pole Inventory Fiber Optic (Tag Polling Inventory)  
 **Package:** `co.id.lintasarta.tagpollinginventory`  
 **Repository Git:** `https://github.com/Amrin002/TagPollingInventory.git` (Branch: `master`)
 
 ---
 
-## 📌 1. Status Fitur yang Sudah Selesai (Completed)
+## ✅ 1. Ringkasan Fitur yang Sudah Selesai (Completed Features)
 
-Aplikasi dibangun 100% **Offline-First** untuk kebutuhan survey tiang Fiber Optic di lapangan tanpa ketergantungan internet/server.
+Seluruh fitur inti aplikasi survey lapangan tiang Fiber Optic telah selesai diimplementasikan, diuji di perangkat fisik, dan di-push ke GitHub:
 
+### A. Core Survey & Data Routing
+- [x] **Lokasi Proyek Ambon, Maluku**:
+  - Seluruh data sampel dan peta terpusat di Kota Ambon (Jl. Pattimura, Jembatan Teluk Ambon, Bandara Pattimura, Wayame, Poka).
 - [x] **Import Rute FO (KML & KMZ)**:
-  - System file picker untuk mengimpor berkas `.kml` dan `.kmz` dari MSFO / software GIS.
-  - Parser KML/KMZ khusus (`KmlRouteParser` & `KmzRouteParser`) untuk mengekstrak `<LineString>` dan titik tiang acuan (`<Point>`).
+  - System file picker untuk mengimpor berkas `.kml` dan `.kmz` milik engineer.
+  - Parser KML/KMZ khusus (`KmlRouteParser` & `KmzRouteParser`) yang mengekstrak `<LineString>` rute acuan dan titik tiang acuan (`<Point>`).
 - [x] **Peta Interaktif OpenStreetMap (OsmDroid)**:
-  - Tampilan peta offline terpusat di **Kota Ambon, Maluku** (Jl. Pattimura, Jembatan Teluk Ambon, Bandara Pattimura, Wayame, Poka).
-  - Garis rute FO (*polyine reference* warna oranye) & garis tiang hasil survey (warna biru).
+  - Visualisasi garis rute FO acuan (oranye) dan garis tiang survey (biru).
   - Penanda titik tiang (*markers*) interaktif dengan warna status (*Hijau = Selesai, Merah = Konflik, Abu-abu = Belum*).
-  - Mekanisme *fallback background vector canvas* agar peta tidak pernah kosong walaupun tanpa internet.
-- [x] **Hardware GPS Location Capture**:
-  - Integrasi `FusedLocationProviderClient` + `LocationManager` native Android.
-  - Tampilan indikator sinyal GPS real-time (Akurasi meter, Ketinggian/Altitude, Provider, Fix Timestamp).
-  - Badging kualitas sinyal (*GOOD FIX $\le 5$m, FAIR FIX $\le 15$m, POOR FIX $> 15$m*).
-  - Penanganan kondisi tiang terhalang pohon / kanopi rimbun (`[✓] Terhalang Pohon/Semak`).
-- [x] **Kalkulator Deviasi Rute (`RouteDeviationService`)**:
+  - Mekanisme *fallback background vector canvas* agar peta tetap tampil meskipun tanpa jaringan internet.
+- [x] **Calculasi Deviasi Rute (`RouteDeviationService`)**:
   - Menghitung jarak tegak lurus (meter) posisi teknisi ke rute acuan (*0–10m Normal, 10–25m Warning, >25m Check Route*).
-- [x] **Pengambilan Foto Kamera (CameraX & Coil)**:
-  - Integrasi CameraX viewfinder dengan fitur foto fisik dan pratinjau Coil.
-- [x] **Penyimpanan Lokal (Local JSON Persistence)**:
-  - Data tiang dan rute disimpan permanen di `inventory_data.json` & `imported_routes.json`.
+
+### B. Hardware GPS Capture & Kondisi Lapangan
+- [x] **Real Hardware GPS Capture (`GpsCaptureScreen.kt`)**:
+  - Mengambil koordinat GPS asli dari hardware perangkat (`FusedLocationProviderClient` + `LocationManager` native).
+  - Menampilkan indikator akurasi meter, altitude, provider, timestamp, dan badging kualitas sinyal (*GOOD FIX $\le 5$m, FAIR FIX $\le 15$m, POOR FIX $> 15$m*).
+  - Animasi *target reticle radar* untuk memandu teknisi berdiri di bawah tiang.
+- [x] **Penanganan Tiang Terhalang Pohon/Semak**:
+  - Menyediakan panduan lapangan dan opsi checklist `[✓] Tandai: Lokasi Tiang Terhalang Pohon / Semak`.
+  - Otomatis mencatat keterangan terhalang pohon dan batas toleransi akurasi ke dalam *Field Notes*.
+  - *Non-blocking GPS Capture*: Tombol penangkapan koordinat tidak pernah terkunci meskipun akurasi di area rimbun berada pada level Fair/Poor.
+
+### C. Mode Online vs Offline Dinamis (`NetworkObserver.kt`)
+- [x] **Pemantau Jaringan Real-Time**:
+  - Otomatis mendeteksi status koneksi internet (**WiFi**, **Cellular Data**, atau **Offline/Airplane Mode**).
+- [x] **Dinamika Status di 15 Layar**:
+  - Badge dinamis **`ONLINE (WiFi/Cellular)`** vs **`OFFLINE (Local)`** di *TopBar* seluruh layar aplikasi.
+  - *Mode Online:* Mengaktifkan trianggulasi Fused Location WiFi/Cellular untuk penangkapan GPS presisi tinggi ($\pm 1.5 - 2.5\text{m}$) & unduhan peta live.
+  - *Mode Offline:* Mempertahankan identitas 100% offline (Hardware GPS + Penyimpanan Lokal JSON `inventory_data.json`).
+
+### D. UI/UX, Navigasi, & Export Engine
+- [x] **Pencegahan Aplikasi Keluar (Navigation Backstack)**:
+  - Integrasi `BackHandler` Jetpack Compose + `screenStack` di `MainViewModel` agar tombol *Back* fisik navigasi sesuai hierarki layar tanpa mengakhiri aplikasi.
+- [x] **Tombol Dinamika Dashboard**:
+  - Percabang aksi utama: **`+ New Field Work`** (saat data 0 / aplikasi baru) dialihkan ke Import Route vs **`▶ Continue Field Work`** (saat data rute/tiang ada).
+- [x] **Bottom Navigation Bar & Ikon Modern**:
+  - Ikon gaya Font Awesome / Material Vector (`SpaceDashboard`, `AltRoute`, `Explore`, `CloudUpload`, `Tune`).
+  - Penambahan top padding 8.dp & ketinggian kontainer 84.dp sehingga ikon menu memiliki spasi di bagian atas.
 - [x] **Engine Export Multiformat**:
-  - Export data ke CSV, KML (XML dengan ExtendedData), dan KMZ (Zip container dengan file foto `images/photo_*.jpg`).
-- [x] **Navigasi & Back Button**:
-  - Integrasi `BackHandler` Jetpack Compose dengan `screenStack` di `MainViewModel` agar tombol *Back* tidak keluar dari aplikasi.
+  - Export data survey ke CSV, KML (XML dengan ExtendedData), dan KMZ (Zip container berisi foto aset `images/photo_*.jpg`).
 
 ---
 
-## ⚠️ 2. Hal-Hal yang Masih Kurang & Perlu Ditingkatkan (Pending / Future Backlog)
+## ⏳ 2. Hal-Hal yang Belum Dikerjakan & Perlu Ditingkatkan (Roadmap / Backlog)
 
-Berikut adalah daftar item peningkatan (*enhancements*) yang direkomendasikan untuk pengembangan selanjutnya:
+Berikut adalah daftar fitur & peningkatan yang direkomendasikan untuk pengembangan tahap berikutnya:
 
-### A. Peta & Fitur Geografis (Map & GIS Enhancements)
-1. **Offline Map MBTiles / Tile Caching**:
-   - *Kondisi Saat Ini:* Menggunakan tile OSM online + canvas fallback.
-   - *Peningkatan:* Integrasi berkas `.mbtiles` atau penyimpanan tile peta offline lokal agar detail jalan/topografi dapat dilihat 100% offline tanpa jaringan seluler sama sekali.
-2. **Drag-and-Drop Pin Fine-Tuning**:
-   - *Kondisi Saat Ini:* Lokasi tiang mengikuti koordinat GPS hardware aktif.
-   - *Peningkatan:* Fitur menggeser *pin marker* secara manual di atas peta untuk melakukan koreksi posisi jika teknisi terhalang pagar/jurang tebal.
+### A. GIS & Fitur Peta Tingkat Lanjut
+1. **Peta Offline MBTiles**:
+   - *Rencana:* Integrasi berkas `.mbtiles` lokal agar peta topografi/jalan dapat dibuka 100% offline tanpa koneksi seluler di daerah terpencil.
+2. **Drag-and-Drop Pin Adjustment**:
+   - *Rencana:* Fitur menggeser *pin marker* secara manual di atas peta untuk koreksi posisi tiang jika teknisi berada di tebing/jurang/lokasi terhalang total.
 
-### B. Kamera & Pengolahan Foto
-1. **Watermark / Timestamp pada Foto**:
-   - *Kondisi Saat Ini:* Foto ditangkap dalam bentuk gambar mentah dari CameraX.
-   - *Peningkatan:* Menambahkan stempel teks (*watermark*) otomatis pada foto berisi: **ID Tiang, Latitude, Longitude, Tanggal/Jam, dan Logo Perusahaan**.
-2. **Kompresi Resolusi Foto**:
-   - *Kondisi Saat Ini:* Menggunakan resolusi bawaan kamera.
-   - *Peningkatan:* Kompresi otomatis resolusi foto (misal: $1920 \times 1080$ JPEG 80% quality) sebelum dimasukkan ke dalam paket KMZ untuk menghemat ruang penyimpanan HP.
-3. **Dukungan Multi-Foto Per Tiang**:
-   - *Kondisi Saat Ini:* 1 foto per tiang.
-   - *Peningkatan:* Mendukung hingga 3 foto per tiang (misal: Foto Fondasi Tiang, Foto Tagging Label, Foto Closure/ODP).
+### B. Pengolahan Foto & Kamera
+1. **Watermark / Timestamp Otomatis pada Foto**:
+   - *Rencana:* Menambahkan stempel teks (*watermark*) otomatis pada foto hasil tangkapan kamera berisi: **ID Tiang, Latitude, Longitude, Tanggal/Jam, dan Logo Perusahaan**.
+2. **Kompresi Resolusi Foto Otomatis**:
+   - *Rencana:* Kompresi resolusi foto (misal: $1920 \times 1080$ JPEG 80%) sebelum dibungkus ke dalam paket KMZ untuk menghemat memori internal HP.
+3. **Multi-Foto per Tiang**:
+   - *Rencana:* Mendukung hingga 3 foto per tiang (Foto Fondasi Tiang, Foto Tagging Label, Foto Closure/ODP).
 
-### C. Arsitektur Data & Kinerja
-1. **Migrasi Penyimpanan ke Room Database**:
-   - *Kondisi Saat Ini:* Menggunakan file JSON lokal (`inventory_data.json`).
-   - *Peningkatan:* Migrasi ke Android Room SQLite DB jika jumlah tiang survey mencapai puluhan ribu tiang agar performa pencarian (*query*) tetap secepat kilat.
-2. **Automated Unit Testing & UI Testing**:
-   - *Peningkatan:* Menambahkan unit test untuk `KmlRouteParser`, `KmzRouteParser`, `RouteDeviationService`, dan ViewModel test.
-
-### D. Fitur Sinkronisasi Cloud (Masa Depan / Opsional)
-- *Catatan:* Inti aplikasi **wajib tetap Offline-First**.
-- *Peningkatan:* Menambahkan modul *Sync Manager* background opsional yang mengirimkan paket KMZ/JSON ke server kantor (*MSFO Backend*) jika HP mendapatkan koneksi WiFi/Internet.
+### C. Arsitektur Data & Pengujian
+1. **Migrasi Penyimpanan ke Room SQLite Database**:
+   - *Rencana:* Migrasi dari file JSON lokal (`inventory_data.json`) ke Android Room DB jika skala data mencapai puluhan ribu tiang agar performa pencarian (*query*) tetap secepat kilat.
+2. **Automated Unit Testing**:
+   - *Rencana:* Menambahkan unit test untuk `KmlRouteParser`, `KmzRouteParser`, `RouteDeviationService`, dan ViewModel test.
 
 ---
 
-## 💻 3. Panduan Melanjutkan Pekerjaan di Perangkat Lain
+## 💻 3. Panduan Melanjutkan Pekerjaan di Komputer Lain
 
-Jika besok Anda berpindah ke laptop/komputer lain, ikuti langkah berikut untuk melanjutkan pekerjaan:
+Jika Anda melanjutkan pekerjaan di perangkat/laptop lain:
 
 ### 1. Clone Repositori Git:
 ```bash
@@ -88,15 +96,15 @@ cd TagPollingInventory
 - Lakukan **Gradle Sync** (`Gradle Sync Now`).
 
 ### 3. Jalankan / Build Aplikasi:
-- Jalankan via terminal atau Run button Android Studio:
 ```bash
 ./gradlew app:assembleDebug
 ```
 
 ---
 
-## 📝 Ringkasan Komitmen Terakhir (Git Commit)
+## 📝 Ringkasan Komitmen Terakhir (Git Status)
 
+- **Repository Remote**: `https://github.com/Amrin002/TagPollingInventory.git`
 - **Branch**: `master`
-- **Last Commit**: `feat: Implement FO Route KML/KMZ Import, Real Hardware GPS Capture, Ambon Survey Route & Navigation Backstack`
-- **Author**: Amrin
+- **Latest Commit**: `feat: Apply dynamic Online and Offline mode monitoring across all app features`
+- **Status Aplikasi**: **Build Success & Verified on Hardware Device**
