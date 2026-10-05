@@ -12,15 +12,17 @@
 Seluruh fitur inti aplikasi survey lapangan tiang Fiber Optic telah selesai diimplementasikan, diuji di perangkat fisik, dan di-push ke GitHub:
 
 ### A. Core Survey & Data Routing
-- [x] **Lokasi Proyek Ambon, Maluku**:
-  - Seluruh data sampel dan peta terpusat di Kota Ambon (Jl. Pattimura, Jembatan Teluk Ambon, Bandara Pattimura, Wayame, Poka).
+- [x] **Manajemen Segmen & Proyek**:
+  - Pembuatan Segmen Manual dan Impor Rute.
+- [x] **Konfigurasi Penamaan Tiang Otomatis (Business Pole Code)**:
+  - Konfigurasi `City Code` (3 digit), `Location Code` (3 digit), dan nomor urut awalan.
+  - Implementasi format auto-increment: `[CITY_CODE][LOCATION_CODE]PL-[SEQUENCE]` (contoh: `ABNTKBPL-001`).
 - [x] **Import Rute FO (KML & KMZ)**:
   - System file picker untuk mengimpor berkas `.kml` dan `.kmz` milik engineer.
   - Parser KML/KMZ khusus (`KmlRouteParser` & `KmzRouteParser`) yang mengekstrak `<LineString>` rute acuan dan titik tiang acuan (`<Point>`).
 - [x] **Peta Interaktif OpenStreetMap (OsmDroid)**:
   - Visualisasi garis rute FO acuan (oranye) dan garis tiang survey (biru).
-  - Penanda titik tiang (*markers*) interaktif dengan warna status (*Hijau = Selesai, Merah = Konflik, Abu-abu = Belum*).
-  - Mekanisme *fallback background vector canvas* agar peta tetap tampil meskipun tanpa jaringan internet.
+  - Penanda titik tiang (*markers*) interaktif dengan warna status menggunakan nama tiang *Business Pole Code* (*Hijau = Selesai, Merah = Konflik, Abu-abu = Belum*).
 - [x] **Calculasi Deviasi Rute (`RouteDeviationService`)**:
   - Menghitung jarak tegak lurus (meter) posisi teknisi ke rute acuan (*0–10m Normal, 10–25m Warning, >25m Check Route*).
 
@@ -31,33 +33,33 @@ Seluruh fitur inti aplikasi survey lapangan tiang Fiber Optic telah selesai diim
   - Animasi *target reticle radar* untuk memandu teknisi berdiri di bawah tiang.
 - [x] **Penanganan Tiang Terhalang Pohon/Semak**:
   - Menyediakan panduan lapangan dan opsi checklist `[✓] Tandai: Lokasi Tiang Terhalang Pohon / Semak`.
-  - Otomatis mencatat keterangan terhalang pohon dan batas toleransi akurasi ke dalam *Field Notes*.
-  - *Non-blocking GPS Capture*: Tombol penangkapan koordinat tidak pernah terkunci meskipun akurasi di area rimbun berada pada level Fair/Poor.
 
 ### C. Mode Online vs Offline Dinamis (`NetworkObserver.kt`)
 - [x] **Pemantau Jaringan Real-Time**:
   - Otomatis mendeteksi status koneksi internet (**WiFi**, **Cellular Data**, atau **Offline/Airplane Mode**).
-- [x] **Dinamika Status di 15 Layar**:
-  - Badge dinamis **`ONLINE (WiFi/Cellular)`** vs **`OFFLINE (Local)`** di *TopBar* seluruh layar aplikasi.
-  - *Mode Online:* Mengaktifkan trianggulasi Fused Location WiFi/Cellular untuk penangkapan GPS presisi tinggi ($\pm 1.5 - 2.5\text{m}$) & unduhan peta live.
-  - *Mode Offline:* Mempertahankan identitas 100% offline (Hardware GPS + Penyimpanan Lokal JSON `inventory_data.json`).
 
-### D. UI/UX, Navigasi, & Export Engine
+### D. Data Persistence & Lifecycle
+- [x] **Penyimpanan Lokal (JSON Repository)**:
+  - Semua progress penandaan (draft tiang) dan atribut disimpan ke dalam berkas `inventory_data.json`.
+- [x] **App Background Autosave**:
+  - Menggunakan Jetpack Lifecycle `LifecycleEventObserver`.
+  - Otomatis melakukan `repository.saveData()` ketika aplikasi diminimalkan (Close, Home, Recent Apps, atau Screen Lock) agar tidak ada data teknisi yang hilang.
+
+### E. UI/UX, Navigasi, & Export Engine
 - [x] **Pencegahan Aplikasi Keluar (Navigation Backstack)**:
-  - Integrasi `BackHandler` Jetpack Compose + `screenStack` di `MainViewModel` agar tombol *Back* fisik navigasi sesuai hierarki layar tanpa mengakhiri aplikasi.
-- [x] **Tombol Dinamika Dashboard**:
-  - Percabang aksi utama: **`+ New Field Work`** (saat data 0 / aplikasi baru) dialihkan ke Import Route vs **`▶ Continue Field Work`** (saat data rute/tiang ada).
-- [x] **Bottom Navigation Bar & Ikon Modern**:
-  - Ikon gaya Font Awesome / Material Vector (`SpaceDashboard`, `AltRoute`, `Explore`, `CloudUpload`, `Tune`).
-  - Penambahan top padding 8.dp & ketinggian kontainer 84.dp sehingga ikon menu memiliki spasi di bagian atas.
+  - Integrasi `BackHandler` Jetpack Compose + `screenStack` di `MainViewModel`.
+  - Tombol Kembali (*Back/Return*) pada layar *Save Success* sekarang langsung kembali murni ke halaman *Segment Detail* atau *List* tanpa menyisakan riwayat.
+- [x] **Bottom Navigation Bar & Ikon Modern**.
 - [x] **Engine Export Multiformat**:
-  - Export data survey ke CSV, KML (XML dengan ExtendedData), dan KMZ (Zip container berisi foto aset `images/photo_*.jpg`).
+  - Export data survey ke CSV (dengan kolom *Pole Code* dan *Internal ID* terpisah), KML (XML dengan *ExtendedData*), dan KMZ (Zip container berisi foto aset `images/photo_*.jpg`).
+- [x] **File Management & Sharing**:
+  - Sinkronisasi `FileProvider` untuk mengirim fail aktual rute `.kmz`, `.kml`, dan `.csv` langsung ke WhatsApp / Email, bukan sekadar teks namanya saja.
 
 ---
 
 ## ⏳ 2. Hal-Hal yang Belum Dikerjakan & Perlu Ditingkatkan (Roadmap / Backlog)
 
-Berikut adalah daftar fitur & peningkatan yang direkomendasikan untuk pengembangan tahap berikutnya:
+Berikut adalah daftar fitur & peningkatan yang direkomendasikan untuk pengembangan tahap berikutnya (Belum Dikerjakan):
 
 ### A. GIS & Fitur Peta Tingkat Lanjut
 1. **Peta Offline MBTiles**:
@@ -73,11 +75,13 @@ Berikut adalah daftar fitur & peningkatan yang direkomendasikan untuk pengembang
 3. **Multi-Foto per Tiang**:
    - *Rencana:* Mendukung hingga 3 foto per tiang (Foto Fondasi Tiang, Foto Tagging Label, Foto Closure/ODP).
 
-### C. Arsitektur Data & Pengujian
+### C. Arsitektur Data & Keamanan
 1. **Migrasi Penyimpanan ke Room SQLite Database**:
    - *Rencana:* Migrasi dari file JSON lokal (`inventory_data.json`) ke Android Room DB jika skala data mencapai puluhan ribu tiang agar performa pencarian (*query*) tetap secepat kilat.
-2. **Automated Unit Testing**:
-   - *Rencana:* Menambahkan unit test untuk `KmlRouteParser`, `KmzRouteParser`, `RouteDeviationService`, dan ViewModel test.
+2. **Login / Otorisasi Teknisi**:
+   - *Rencana:* Menambahkan fitur registrasi / login teknisi lapangan (menggunakan Firebase Auth) agar data hasil survei memiliki identitas pelaksana.
+3. **Sinkronisasi Otomatis API Cloud**:
+   - *Rencana:* Jika teknisi kembali masuk ke jaringan internet, aplikasi otomatis melakukan proses sinkronisasi (*push*) seluruh data `inventory_data.json` dan foto-foto ke Server/Database Pusat.
 
 ---
 
@@ -106,5 +110,5 @@ cd TagPollingInventory
 
 - **Repository Remote**: `https://github.com/Amrin002/TagPollingInventory.git`
 - **Branch**: `master`
-- **Latest Commit**: `feat: Apply dynamic Online and Offline mode monitoring across all app features`
-- **Status Aplikasi**: **Build Success & Verified on Hardware Device**
+- **Latest Commit**: `feat: Fix data persistence on app close, correct back navigation after successful save, and implement business Pole Naming configuration`
+- **Status Aplikasi**: **Build Success & Code Pushed to Git**
