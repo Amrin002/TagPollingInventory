@@ -102,7 +102,7 @@ fun OsmMapView(
             poles.forEach { pole ->
                 val marker = Marker(mapView).apply {
                     position = GeoPoint(pole.latitude, pole.longitude)
-                    title = "${pole.id} (${pole.tagNumber})"
+                    title = "${pole.poleCode.ifEmpty { pole.id }} (${pole.tagNumber})"
                     snippet = "${pole.type.displayName} • ${pole.condition.displayName} • ${pole.status.displayName}"
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
 

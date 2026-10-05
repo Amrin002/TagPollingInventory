@@ -177,6 +177,11 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                     }
                 }
 
+                ScreenFlow.CREATE_SEGMENT -> CreateSegmentScreen(
+                    viewModel = viewModel,
+                    onBackClick = { viewModel.navigateBack() }
+                )
+
                 ScreenFlow.IMPORT_ROUTE -> ImportRouteScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() }
@@ -227,8 +232,8 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                 ScreenFlow.SAVE_SUCCESS -> SaveSuccessScreen(
                     viewModel = viewModel,
                     onTagNextPole = { viewModel.prepareNextPoleTagging() },
-                    onViewPole = { viewModel.navigateTo(ScreenFlow.INVENTORY_LIST) },
-                    onBackToSegment = { viewModel.navigateTo(ScreenFlow.SEGMENT_DETAIL) }
+                    onViewPole = { viewModel.navigateTo(ScreenFlow.INVENTORY_LIST, clearStack = true) },
+                    onBackToSegment = { viewModel.navigateTo(ScreenFlow.SEGMENT_DETAIL, clearStack = true) }
                 )
 
                 ScreenFlow.INVENTORY_LIST -> PoleInventoryListScreen(

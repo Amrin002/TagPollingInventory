@@ -28,7 +28,7 @@ class ExportEngine(private val context: Context) {
         }
 
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())
-        val dateDisplay = SimpleDateFormat("01 Oct 2026 — HH:mm", Locale.US).format(Date())
+        val dateDisplay = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
         val cleanProject = projectName.replace(" ", "_")
         val cleanSegment = segmentName.replace(" ", "_")
         val fileName = "${cleanProject}_${cleanSegment}_${timestamp}.${format.extension}"
@@ -54,9 +54,10 @@ class ExportEngine(private val context: Context) {
 
     private fun generateCsv(file: File, poles: List<Pole>, options: ExportOptions) {
         val sb = StringBuilder()
-        sb.append("Pole ID,Segment,Latitude,Longitude,GPS Accuracy (m),Pole Type,Condition,Ownership,Height,Tag Number,FO Cable,Cable Condition,Equipment,Notes,Timestamp,Photo\n")
+        sb.append("Pole Code,Internal ID,Segment,Latitude,Longitude,GPS Accuracy (m),Pole Type,Condition,Ownership,Height,Tag Number,FO Cable,Cable Condition,Equipment,Notes,Timestamp,Photo\n")
 
         for (pole in poles) {
+            sb.append("\"${pole.poleCode}\",")
             sb.append("\"${pole.id}\",")
             sb.append("\"${pole.segmentId}\",")
             sb.append("${if (options.includeCoordinates) pole.latitude else ""},")
@@ -127,14 +128,15 @@ class ExportEngine(private val context: Context) {
             }
 
             sb.append("    <Placemark>\n")
-            sb.append("      <name>${pole.id}</name>\n")
+            sb.append("      <name>${pole.poleCode}</name>\n")
             sb.append("      <styleUrl>$style</styleUrl>\n")
 
             // HTML Description
             sb.append("      <description><![CDATA[\n")
             sb.append("        <div style=\"font-family: Arial, sans-serif; padding: 8px;\">\n")
-            sb.append("          <h3 style=\"margin:0 0 8px 0; color:#1565C0;\">Pole ID: ${pole.id}</h3>\n")
+            sb.append("          <h3 style=\"margin:0 0 8px 0; color:#1565C0;\">Pole Code: ${pole.poleCode}</h3>\n")
             sb.append("          <table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" style=\"border-collapse:collapse;\">\n")
+            sb.append("            <tr><td><b>Internal ID</b></td><td>${pole.id}</td></tr>\n")
             sb.append("            <tr><td><b>Status</b></td><td>${pole.status.displayName}</td></tr>\n")
             if (options.includeCoordinates) {
                 sb.append("            <tr><td><b>Coordinates</b></td><td>${pole.latitude}, ${pole.longitude} (±${pole.accuracy}m)</td></tr>\n")

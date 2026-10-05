@@ -65,19 +65,28 @@ data class Pole(
     val equipment: Set<String> = setOf("ODP", "Closure"),
     val notes: String = "",
     val photoPath: String? = null,
-    val status: TagStatus = TagStatus.NOT_TAGGED
+    val status: TagStatus = TagStatus.NOT_TAGGED,
+    val poleCode: String = "" // Business Identifier (e.g. ABNTKBPL-001)
 )
 
 data class Segment(
     val id: String,
+    val projectId: String = "PRJ-AMB-01",
     val name: String,
-    val route: String,
-    val startPoint: Pair<Double, Double>,
-    val endPoint: Pair<Double, Double>,
-    val status: SegmentStatus,
-    val totalPoles: Int,
-    val completedPoles: Int,
-    val conflictPoles: Int
+    val description: String = "",
+    val route: String = "",
+    val startPoint: Pair<Double, Double> = Pair(0.0, 0.0),
+    val endPoint: Pair<Double, Double> = Pair(0.0, 0.0),
+    val status: SegmentStatus = SegmentStatus.NOT_STARTED,
+    val totalPoles: Int = 0,
+    val completedPoles: Int = 0,
+    val conflictPoles: Int = 0,
+    val createdAt: String = "",
+    val updatedAt: String = "",
+    val referenceRouteFileName: String? = null,
+    val cityCode: String = "",
+    val locationCode: String = "",
+    val currentSequence: Int = 0
 )
 
 data class Project(

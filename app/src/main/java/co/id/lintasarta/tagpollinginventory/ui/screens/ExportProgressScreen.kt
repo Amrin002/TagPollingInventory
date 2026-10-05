@@ -19,10 +19,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import co.id.lintasarta.tagpollinginventory.data.model.ExportFormat
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import java.io.File
 
 @Composable
 fun ExportProgressScreen(
@@ -192,12 +195,28 @@ fun ExportProgressScreen(
                 // Actions: Share, Open Folder, Export Again
                 Button(
                     onClick = {
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "*/*"
-                            putExtra(Intent.EXTRA_SUBJECT, lastGenerated?.fileName ?: "Export File")
-                            putExtra(Intent.EXTRA_TEXT, "Exported Pole Inventory data: ${lastGenerated?.fileName}")
+                        lastGenerated?.let { exportFile ->
+                            val fileObj = File(exportFile.filePath)
+                            if (fileObj.exists()) {
+                                val uri = FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    fileObj
+                                )
+                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = when (exportFile.format) {
+                                        ExportFormat.CSV -> "text/csv"
+                                        ExportFormat.KML -> "application/vnd.google-earth.kml+xml"
+                                        ExportFormat.KMZ -> "application/vnd.google-earth.kmz"
+                                    }
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    putExtra(Intent.EXTRA_SUBJECT, exportFile.fileName)
+                                    putExtra(Intent.EXTRA_TEXT, "Exported Pole Inventory data: ${exportFile.fileName}")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, "Share Export File"))
+                            }
                         }
-                        context.startActivity(Intent.createChooser(shareIntent, "Share Export File"))
                     },
                     modifier = Modifier
                         .fillMaxWidth()

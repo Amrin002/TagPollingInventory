@@ -16,12 +16,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import co.id.lintasarta.tagpollinginventory.data.model.ExportFile
 import co.id.lintasarta.tagpollinginventory.data.model.ExportFormat
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import java.io.File
 
 @Composable
 fun FileManagementScreen(
@@ -78,12 +80,26 @@ fun FileManagementScreen(
                         ExportFileCard(
                             file = file,
                             onShare = {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "*/*"
-                                    putExtra(Intent.EXTRA_SUBJECT, file.fileName)
-                                    putExtra(Intent.EXTRA_TEXT, "Export File: ${file.fileName}")
+                                val fileObj = File(file.filePath)
+                                if (fileObj.exists()) {
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        fileObj
+                                    )
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = when (file.format) {
+                                            ExportFormat.CSV -> "text/csv"
+                                            ExportFormat.KML -> "application/vnd.google-earth.kml+xml"
+                                            ExportFormat.KMZ -> "application/vnd.google-earth.kmz"
+                                        }
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        putExtra(Intent.EXTRA_SUBJECT, file.fileName)
+                                        putExtra(Intent.EXTRA_TEXT, "Export File: ${file.fileName}")
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share File"))
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Share File"))
                             },
                             onDelete = { viewModel.deleteExportFile(file.id) }
                         )

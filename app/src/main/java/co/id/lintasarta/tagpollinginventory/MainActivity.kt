@@ -7,6 +7,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import co.id.lintasarta.tagpollinginventory.ui.navigation.MainNavigationScreen
 import co.id.lintasarta.tagpollinginventory.ui.theme.TagPollingInventoryTheme
@@ -29,6 +33,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             TagPollingInventoryTheme {
                 val viewModel: MainViewModel = viewModel()
+                
+                // Save data when app goes to background
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val lifecycleObserver = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_STOP ||
+                            event == Lifecycle.Event.ON_PAUSE) {
+                            viewModel.repository.saveData()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+                    }
+                }
+                
                 MainNavigationScreen(viewModel = viewModel)
             }
         }

@@ -158,6 +158,10 @@ class RouteRepository(private val context: Context) {
         }
     }
 
+    fun clearActiveRoute() {
+        _activeRoute.value = null
+    }
+
     fun deleteRoute(routeId: String) {
         val list = _importedRoutes.value.filter { it.id != routeId }
         _importedRoutes.value = list

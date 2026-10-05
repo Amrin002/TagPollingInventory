@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -59,11 +60,34 @@ fun SegmentDetailScreen(
         polesMap.values.filter { it.segmentId == activeSegment.id }.sortedBy { it.sequence }
     }
 
+    var showCompleteDialog by remember { mutableStateOf(false) }
+
+    if (showCompleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showCompleteDialog = false },
+            title = { Text("Complete Segment?") },
+            text = { Text("You have surveyed ${activeSegment.completedPoles} poles.\nThe segment will be marked as completed.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.markActiveSegmentCompleted()
+                    showCompleteDialog = false
+                }) {
+                    Text("COMPLETE SEGMENT")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCompleteDialog = false }) {
+                    Text("CANCEL")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopBar(
                 title = activeSegment.name,
-                subtitle = activeSegment.route,
+                subtitle = if (activeSegment.route.isNotEmpty() && activeSegment.route != "N/A") activeSegment.route else "No reference route",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -222,6 +246,20 @@ fun SegmentDetailScreen(
                         }
                     }
 
+                    if (activeSegment.status != SegmentStatus.COMPLETED && segmentPoles.isNotEmpty()) {
+                        item {
+                            Button(
+                                onClick = { showCompleteDialog = true },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("MARK SEGMENT AS COMPLETED", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
                     items(segmentPoles) { pole ->
                         Card(
                             modifier = Modifier
@@ -254,7 +292,7 @@ fun SegmentDetailScreen(
                                     Spacer(modifier = Modifier.width(12.dp))
                                     Column {
                                         Text(
-                                            text = pole.id,
+                                            text = pole.poleCode.ifEmpty { pole.id },
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.Bold
                                         )

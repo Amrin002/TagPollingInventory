@@ -37,7 +37,8 @@ fun PoleInventoryListScreen(
 
     val filteredPoles = remember(allPoles, searchQuery, statusFilter) {
         allPoles.filter { pole ->
-            val matchesSearch = pole.id.contains(searchQuery, ignoreCase = true) ||
+            val matchesSearch = pole.poleCode.contains(searchQuery, ignoreCase = true) ||
+                    pole.id.contains(searchQuery, ignoreCase = true) ||
                     pole.tagNumber.contains(searchQuery, ignoreCase = true) ||
                     pole.segmentId.contains(searchQuery, ignoreCase = true)
 
@@ -169,7 +170,7 @@ fun PoleInventoryListScreen(
                         ) {
                             Column {
                                 Text(
-                                    text = pole.id,
+                                    text = pole.poleCode.ifEmpty { pole.id },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = TelecomPrimary

@@ -23,6 +23,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 enum class AppTab {
     DASHBOARD,
@@ -34,6 +37,7 @@ enum class AppTab {
 
 enum class ScreenFlow {
     TAB_ROOT,
+    CREATE_SEGMENT,
     SEGMENT_DETAIL,
     FIELD_MAP,
     GPS_CAPTURE,
@@ -159,8 +163,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         screenStack.clear()
     }
 
-    fun navigateTo(screen: ScreenFlow) {
-        if (_currentScreen.value != screen) {
+    fun navigateTo(screen: ScreenFlow, clearStack: Boolean = false) {
+        if (clearStack) {
+            screenStack.clear()
+            _currentScreen.value = screen
+        } else if (_currentScreen.value != screen) {
             screenStack.add(_currentScreen.value)
             _currentScreen.value = screen
         }
@@ -211,17 +218,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun confirmRouteImport(customProjectName: String, customSegmentName: String) {
+    fun confirmRouteImport(customProjectName: String, customSegmentName: String, cityCode: String = "", locationCode: String = "", startingSequence: Int = 0) {
         val preview = _importPreviewData.value ?: return
         val currentProj = project.value
 
         val projId = currentProj.id
-        val segId = selectedSegmentId.value
+        
+        // Use the customSegmentName for the route name, fallback to preview routeName if empty
+        val finalRouteName = if (customSegmentName.isNotEmpty()) customSegmentName else preview.routeName
+
+        // We create a new segment with this imported route.
+        val segId = "SEG-" + System.currentTimeMillis().toString().takeLast(6)
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+        
+        val newSegment = Segment(
+            id = segId,
+            projectId = projId,
+            name = finalRouteName,
+            description = "Created with imported route",
+            createdAt = now,
+            updatedAt = now,
+            referenceRouteFileName = preview.fileName,
+            cityCode = cityCode,
+            locationCode = locationCode,
+            currentSequence = startingSequence
+        )
+        
+        repository.addSegment(newSegment)
+        repository.selectSegment(segId)
 
         val routeId = "ROUTE-" + System.currentTimeMillis().toString().takeLast(6)
         val importedRoute = ImportedRoute(
             id = routeId,
-            name = if (preview.routeName.isNotEmpty()) preview.routeName else customSegmentName,
+            name = finalRouteName,
             sourceFileName = preview.fileName,
             sourceFileType = preview.fileType,
             projectId = projId,
@@ -233,7 +262,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         routeRepository.addAndActivateRoute(importedRoute)
         _importPreviewData.value = null
         screenStack.clear()
-        _currentScreen.value = ScreenFlow.FIELD_MAP
+        _currentScreen.value = ScreenFlow.SEGMENT_DETAIL // Go to segment detail instead of Field Map directly
+    }
+
+    fun createSegment(name: String, description: String, cityCode: String = "", locationCode: String = "", startingSequence: Int = 0) {
+        val projId = project.value.id
+        val segId = "SEG-" + System.currentTimeMillis().toString().takeLast(6)
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+        
+        val newSegment = Segment(
+            id = segId,
+            projectId = projId,
+            name = name,
+            description = description,
+            createdAt = now,
+            updatedAt = now,
+            cityCode = cityCode,
+            locationCode = locationCode,
+            currentSequence = startingSequence
+        )
+        repository.addSegment(newSegment)
+        repository.selectSegment(segId)
+        
+        // Navigate to Segment Detail
+        navigateTo(ScreenFlow.SEGMENT_DETAIL)
+    }
+
+    fun markActiveSegmentCompleted() {
+        val segId = selectedSegmentId.value
+        if (segId.isNotEmpty()) {
+            repository.markSegmentCompleted(segId)
+        }
     }
 
     fun clearImportPreview() {
@@ -262,6 +321,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectSegment(segmentId: String, navigateToDetail: Boolean = true) {
         repository.selectSegment(segmentId)
+        
+        // Find if we have an imported route for this segment and activate it
+        val matchingRoute = routeRepository.importedRoutes.value.find { it.segmentId == segmentId }
+        if (matchingRoute != null) {
+            routeRepository.setActiveRoute(matchingRoute.id)
+        } else {
+            routeRepository.clearActiveRoute()
+        }
+
         if (navigateToDetail) {
             navigateTo(ScreenFlow.SEGMENT_DETAIL)
         }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import co.id.lintasarta.tagpollinginventory.ui.components.SegmentStatusBadge
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import co.id.lintasarta.tagpollinginventory.ui.viewmodel.ScreenFlow
 
 @Composable
 fun SegmentListScreen(
@@ -129,17 +131,30 @@ fun SegmentListScreen(
             }
         }
 
-        // Segment List
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
-            items(filteredSegments) { segment ->
-                SegmentCard(
-                    segment = segment,
-                    onClick = { onSegmentClick(segment.id) }
-                )
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Segment List
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(filteredSegments) { segment ->
+                    SegmentCard(
+                        segment = segment,
+                        onClick = { onSegmentClick(segment.id) }
+                    )
+                }
+            }
+
+            FloatingActionButton(
+                onClick = { viewModel.navigateTo(ScreenFlow.CREATE_SEGMENT) },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 16.dp, end = 16.dp),
+                containerColor = TelecomPrimary,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Create Segment")
             }
         }
     }

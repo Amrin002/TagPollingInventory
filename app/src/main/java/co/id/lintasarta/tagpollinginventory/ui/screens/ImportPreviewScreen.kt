@@ -43,6 +43,10 @@ fun ImportPreviewScreen(
         mutableStateOf(if (!previewData?.detectedSegment.isNullOrEmpty()) previewData!!.detectedSegment else activeSegment?.name ?: "")
     }
 
+    var cityCode by remember { mutableStateOf("") }
+    var locationCode by remember { mutableStateOf("") }
+    var startingSequence by remember { mutableStateOf("") }
+
     val isValidRoute = (previewData?.coordinateCount ?: 0) > 0 || (previewData?.referencePoleCount ?: 0) > 0
 
     Scaffold(
@@ -158,6 +162,40 @@ fun ImportPreviewScreen(
                             singleLine = true,
                             shape = RoundedCornerShape(8.dp)
                         )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Pole Naming Configuration",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TelecomPrimary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = cityCode,
+                                onValueChange = { cityCode = it.take(3).uppercase() },
+                                label = { Text("City Code (3 chars)") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = locationCode,
+                                onValueChange = { locationCode = it.take(3).uppercase() },
+                                label = { Text("Loc Code (3 chars)") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = startingSequence,
+                            onValueChange = { if (it.all { char -> char.isDigit() }) startingSequence = it },
+                            label = { Text("Starting Sequence (e.g. 0)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
                     }
                 }
 
@@ -183,7 +221,8 @@ fun ImportPreviewScreen(
 
                     Button(
                         onClick = {
-                            viewModel.confirmRouteImport(customProjectName, customSegmentName)
+                            val seqInt = startingSequence.toIntOrNull() ?: 0
+                            viewModel.confirmRouteImport(customProjectName, customSegmentName, cityCode, locationCode, seqInt)
                             onConfirmImportClick()
                         },
                         modifier = Modifier
