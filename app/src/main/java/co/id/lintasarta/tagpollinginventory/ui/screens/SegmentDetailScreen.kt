@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import co.id.lintasarta.tagpollinginventory.data.model.Segment
+import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.FieldMapCanvas
 import co.id.lintasarta.tagpollinginventory.ui.components.TagStatusBadge
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
@@ -38,7 +40,19 @@ fun SegmentDetailScreen(
     val networkStatus by viewModel.networkStatus.collectAsState()
 
     val activeSegment = remember(project, segmentId) {
-        project.segments.find { it.id == segmentId } ?: project.segments.first()
+        project.segments.find { it.id == segmentId } 
+            ?: project.segments.firstOrNull() 
+            ?: Segment(
+                id = "", 
+                name = "No Segment Selected", 
+                route = "N/A", 
+                startPoint = Pair(0.0, 0.0), 
+                endPoint = Pair(0.0, 0.0), 
+                status = SegmentStatus.NOT_STARTED, 
+                totalPoles = 0, 
+                completedPoles = 0, 
+                conflictPoles = 0
+            )
     }
 
     val segmentPoles = remember(polesMap, segmentId) {

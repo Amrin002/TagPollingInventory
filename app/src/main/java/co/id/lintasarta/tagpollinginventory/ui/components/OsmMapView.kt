@@ -151,13 +151,19 @@ fun OsmMapView(
             mapView.overlays.add(userMarker)
         }
 
-        // 4. Center map to target pole or bounding box
+        // 4. Center map to target pole ONLY if it's the first time or location hasn't been set yet
         val targetPole = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
-        if (targetPole != null) {
-            mapView.controller.animateTo(GeoPoint(targetPole.latitude, targetPole.longitude))
-        } else if (allGeoPoints.isNotEmpty()) {
-            val box = BoundingBox.fromGeoPoints(allGeoPoints)
-            mapView.zoomToBoundingBox(box, true, 80)
+        
+        // Kita simpan status apakah map sudah pernah di-center sebelumnya
+        // Untuk saat ini, asumsikan jika zoom masih rendah (default/awal), kita arahkan ke target.
+        if (mapView.zoomLevelDouble < 10) {
+            if (targetPole != null) {
+                mapView.controller.setCenter(GeoPoint(targetPole.latitude, targetPole.longitude))
+                mapView.controller.setZoom(16.5)
+            } else if (allGeoPoints.isNotEmpty()) {
+                val box = BoundingBox.fromGeoPoints(allGeoPoints)
+                mapView.zoomToBoundingBox(box, true, 80)
+            }
         }
 
         mapView.invalidate()

@@ -32,7 +32,7 @@ fun ImportPreviewScreen(
     val networkStatus by viewModel.networkStatus.collectAsState()
 
     val activeSegment = remember(project, segmentId) {
-        project.segments.find { it.id == segmentId } ?: project.segments.first()
+        project.segments.find { it.id == segmentId } ?: project.segments.firstOrNull()
     }
 
     var customProjectName by remember(previewData) {
@@ -40,7 +40,7 @@ fun ImportPreviewScreen(
     }
 
     var customSegmentName by remember(previewData) {
-        mutableStateOf(if (!previewData?.detectedSegment.isNullOrEmpty()) previewData!!.detectedSegment else activeSegment.name)
+        mutableStateOf(if (!previewData?.detectedSegment.isNullOrEmpty()) previewData!!.detectedSegment else activeSegment?.name ?: "")
     }
 
     val isValidRoute = (previewData?.coordinateCount ?: 0) > 0 || (previewData?.referencePoleCount ?: 0) > 0

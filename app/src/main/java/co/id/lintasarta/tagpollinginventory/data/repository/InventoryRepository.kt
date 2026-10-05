@@ -38,65 +38,17 @@ class InventoryRepository(private val context: Context) {
     }
 
     private fun createInitialProject(): Project {
-        val seg19 = Segment(
-            id = "SEG-19",
-            name = "Segment 19",
-            route = "Jl. Pattimura → Teluk Ambon (JPA)",
-            startPoint = Pair(-3.6954, 128.1814),
-            endPoint = Pair(-3.6558, 128.1912),
-            status = SegmentStatus.NOT_STARTED,
-            totalPoles = 0,
-            completedPoles = 0,
-            conflictPoles = 0
-        )
-
-        val seg2212 = Segment(
-            id = "SEG-2212",
-            name = "Segment 2212",
-            route = "Teluk Ambon → Bandara Pattimura",
-            startPoint = Pair(-3.6558, 128.1912),
-            endPoint = Pair(-3.7075, 128.0890),
-            status = SegmentStatus.NOT_STARTED,
-            totalPoles = 0,
-            completedPoles = 0,
-            conflictPoles = 0
-        )
-
-        val seg105 = Segment(
-            id = "SEG-105",
-            name = "Segment 105",
-            route = "Wayame → Poka Substation",
-            startPoint = Pair(-3.6500, 128.1750),
-            endPoint = Pair(-3.6600, 128.1850),
-            status = SegmentStatus.NOT_STARTED,
-            totalPoles = 0,
-            completedPoles = 0,
-            conflictPoles = 0
-        )
-
-        val seg88 = Segment(
-            id = "SEG-88",
-            name = "Segment 88",
-            route = "Ring Ambon Kota",
-            startPoint = Pair(-3.6900, 128.1800),
-            endPoint = Pair(-3.7000, 128.1900),
-            status = SegmentStatus.NOT_STARTED,
-            totalPoles = 0,
-            completedPoles = 0,
-            conflictPoles = 0
-        )
-
-        val segments = listOf(seg19, seg2212, seg105, seg88)
-
+        // Hapus data sample, karena nanti kita punya data sendiri 
+        // Setiap data kml yang diimport akan tersimpan di segment
         return Project(
             id = "PRJ-AMB-01",
-            name = "Ambon Sector 1",
-            location = "Kota Ambon, Maluku",
+            name = "Project Utama",
+            location = "Lokasi Kerja",
             totalPoles = 0,
             completedPoles = 0,
             conflictPoles = 0,
             uncompletedPoles = 0,
-            segments = segments
+            segments = emptyList() // Segments akan ditambahkan dari import KML
         )
     }
 

@@ -18,6 +18,8 @@ import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.model.ExportFormat
 import co.id.lintasarta.tagpollinginventory.data.model.ExportOptions
 import co.id.lintasarta.tagpollinginventory.data.model.ExportScope
+import co.id.lintasarta.tagpollinginventory.data.model.Segment
+import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
@@ -31,7 +33,19 @@ fun ExportCenterScreen(
     val segmentId by viewModel.selectedSegmentId.collectAsState()
 
     val activeSegment = remember(project, segmentId) {
-        project.segments.find { it.id == segmentId } ?: project.segments.first()
+        project.segments.find { it.id == segmentId } 
+            ?: project.segments.firstOrNull() 
+            ?: Segment(
+                id = "", 
+                name = "No Segment Selected", 
+                route = "N/A", 
+                startPoint = Pair(0.0, 0.0), 
+                endPoint = Pair(0.0, 0.0), 
+                status = SegmentStatus.NOT_STARTED, 
+                totalPoles = 0, 
+                completedPoles = 0, 
+                conflictPoles = 0
+            )
     }
 
     var showOptionsDialog by remember { mutableStateOf(false) }
