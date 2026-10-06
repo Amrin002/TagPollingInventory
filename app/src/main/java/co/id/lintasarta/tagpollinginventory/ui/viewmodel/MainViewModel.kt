@@ -394,9 +394,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(ScreenFlow.PHOTO_CAPTURE)
     }
 
-    fun usePhotoAndContinue(photoPath: String) {
-        repository.updateDraftPhoto(photoPath)
-        navigateTo(ScreenFlow.REVIEW_POLE)
+    fun addPhotoAndContinue(photoPath: String) {
+        repository.addDraftPhoto(photoPath)
+        // If 3 photos reached, we could auto-navigate, but let's let the UI handle when to navigate
+    }
+    
+    fun removePhoto(photoPath: String) {
+        repository.removeDraftPhoto(photoPath)
     }
 
     fun savePoleLocally() {

@@ -68,7 +68,7 @@ data class Pole(
     val cableCondition: CableCondition = CableCondition.GOOD,
     val equipment: Set<String> = setOf("ODP", "Closure"),
     val notes: String = "",
-    val photoPath: String? = null,
+    val photoPaths: List<String> = emptyList(),
     val status: TagStatus = TagStatus.NOT_TAGGED,
     val poleCode: String = "" // Business Identifier (e.g. ABNTKBPL-001)
 )

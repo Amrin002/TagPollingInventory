@@ -73,7 +73,7 @@ class ExportEngine(private val context: Context) {
             sb.append("\"${if (options.includeAttributes) pole.equipment.joinToString("; ") else ""}\",")
             sb.append("\"${if (options.includeNotes) pole.notes.replace("\"", "'") else ""}\",")
             sb.append("\"${if (options.includeTimestamp) pole.capturedTimestamp else ""}\",")
-            sb.append("\"${if (options.includePhotos) pole.photoPath ?: "N/A" else ""}\"\n")
+            sb.append("\"${if (options.includePhotos) pole.photoPaths.joinToString("; ") else ""}\"\n")
         }
 
         file.writeText(sb.toString())
@@ -157,9 +157,12 @@ class ExportEngine(private val context: Context) {
             }
             sb.append("          </table>\n")
 
-            if (isKmz && options.includePhotoReferences && !pole.photoPath.isNullOrEmpty()) {
-                val photoName = "photo_${pole.id}.jpg"
-                sb.append("          <br/><img src=\"images/$photoName\" width=\"300\" style=\"border-radius:4px;\"/>\n")
+            if (isKmz && options.includePhotoReferences && pole.photoPaths.isNotEmpty()) {
+                sb.append("          <br/>\n")
+                pole.photoPaths.forEachIndexed { index, _ ->
+                    val photoName = "photo_${pole.id}_$index.jpg"
+                    sb.append("          <img src=\"images/$photoName\" width=\"300\" style=\"border-radius:4px; margin-right:8px;\"/>\n")
+                }
             }
             sb.append("        </div>\n")
             sb.append("      ]]></description>\n")
@@ -202,17 +205,19 @@ class ExportEngine(private val context: Context) {
 
             // 2. Add actual photos if file exists, else placeholder
             for (pole in poles) {
-                if (options.includePhotos && !pole.photoPath.isNullOrEmpty()) {
-                    val photoEntry = ZipEntry("images/photo_${pole.id}.jpg")
-                    zip.putNextEntry(photoEntry)
-                    val photoFile = File(pole.photoPath)
-                    if (photoFile.exists()) {
-                        zip.write(photoFile.readBytes())
-                    } else {
-                        val dummyImageBytes = createDummyJpgBytes(pole.id)
-                        zip.write(dummyImageBytes)
+                if (options.includePhotos && pole.photoPaths.isNotEmpty()) {
+                    pole.photoPaths.forEachIndexed { index, path ->
+                        val photoEntry = ZipEntry("images/photo_${pole.id}_$index.jpg")
+                        zip.putNextEntry(photoEntry)
+                        val photoFile = File(path)
+                        if (photoFile.exists()) {
+                            zip.write(photoFile.readBytes())
+                        } else {
+                            val dummyImageBytes = createDummyJpgBytes(pole.id)
+                            zip.write(dummyImageBytes)
+                        }
+                        zip.closeEntry()
                     }
-                    zip.closeEntry()
                 }
             }
         }

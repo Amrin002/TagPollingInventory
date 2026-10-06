@@ -6,10 +6,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,7 +26,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +48,8 @@ fun PhotoCaptureScreen(
 ) {
     val context = LocalContext.current
     val draftPole by viewModel.currentDraftPole.collectAsState()
+    val capturedPhotos = draftPole?.photoPaths ?: emptyList()
+    val maxPhotos = 3
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -67,8 +72,7 @@ fun PhotoCaptureScreen(
         }
     }
 
-    var isPhotoCaptured by remember { mutableStateOf(false) }
-    var capturedPhotoFile by remember { mutableStateOf<File?>(null) }
+    var isCapturing by remember { mutableStateOf(false) }
     var flashMode by remember { mutableStateOf(ImageCapture.FLASH_MODE_OFF) }
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
     var imageCaptureInstance by remember { mutableStateOf<ImageCapture?>(null) }
@@ -77,8 +81,8 @@ fun PhotoCaptureScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Capture Pole Photo",
-                subtitle = draftPole?.id ?: "P-019-019",
+                title = "Capture Pole Photos",
+                subtitle = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "P-019-019",
                 onBackClick = onBackClick
             )
         }
@@ -98,14 +102,20 @@ fun PhotoCaptureScreen(
                     modifier = Modifier.padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val label = when(capturedPhotos.size) {
+                        0 -> "Photo 1: Pole Foundation & Surroundings"
+                        1 -> "Photo 2: Tag Label & Serial Number"
+                        2 -> "Photo 3: Top Closure / ODP / Cables"
+                        else -> "Maximum photos reached ($maxPhotos/3)"
+                    }
                     Text(
-                        text = "Move approximately 5–15 meters away from the pole.",
+                        text = label,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = if (capturedPhotos.size < maxPhotos) Color.White else Color(0xFF4CAF50)
                     )
                     Text(
-                        text = "Capture the pole and surrounding condition clearly.",
+                        text = "${capturedPhotos.size} of $maxPhotos photos taken",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.LightGray
                     )
@@ -120,9 +130,9 @@ fun PhotoCaptureScreen(
                     .background(Color(0xFF121212)),
                 contentAlignment = Alignment.Center
             ) {
-                if (!isPhotoCaptured) {
-                    if (hasCameraPermission) {
-                        // Real CameraX Live Preview Feed!
+                if (hasCameraPermission) {
+                    // Real CameraX Live Preview Feed!
+                    if (capturedPhotos.size < maxPhotos) {
                         CameraPreview(
                             cameraSelector = cameraSelector,
                             flashMode = flashMode,
@@ -135,113 +145,102 @@ fun PhotoCaptureScreen(
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             val w = size.width
                             val h = size.height
-                            val boxW = w * 0.5f
-                            val boxH = h * 0.75f
+                            val boxW = w * 0.7f
+                            val boxH = h * 0.8f
                             drawRect(
-                                color = TelecomPrimary.copy(alpha = 0.7f),
+                                color = TelecomPrimary.copy(alpha = 0.5f),
                                 topLeft = Offset((w - boxW) / 2, (h - boxH) / 2),
                                 size = Size(boxW, boxH),
                                 style = Stroke(width = 4f)
                             )
                         }
                     } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = null,
-                                tint = Color.Gray,
-                                modifier = Modifier.size(64.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Camera Permission Required",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(
-                                onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                                colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
-                            ) {
-                                Text("Grant Permission")
-                            }
-                        }
-                    }
-
-                    // GPS & Distance Overlay Badges
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.6f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.GpsFixed,
-                                    contentDescription = null,
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("GPS ±2.8m", style = MaterialTheme.typography.labelSmall, color = Color.White)
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color.Black.copy(alpha = 0.6f)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Straighten,
-                                    contentDescription = null,
-                                    tint = Color(0xFFFFB74D),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Distance ~8m", style = MaterialTheme.typography.labelSmall, color = Color.White)
-                            }
-                        }
-                    }
-                } else {
-                    // Actual Taken Photo Preview via Coil AsyncImage
-                    if (capturedPhotoFile != null && capturedPhotoFile!!.exists()) {
-                        AsyncImage(
-                            model = capturedPhotoFile,
-                            contentDescription = "Captured Pole Photo",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
+                        // Max photos reached preview
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0xFF263238)),
+                            modifier = Modifier.fillMaxSize().background(Color(0xFF263238)),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    imageVector = Icons.Default.PhotoCamera,
+                                    imageVector = Icons.Default.CheckCircle,
                                     contentDescription = null,
-                                    tint = Color.White.copy(alpha = 0.6f),
+                                    tint = Color(0xFF4CAF50),
                                     modifier = Modifier.size(64.dp)
                                 )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text("✓ Photo Saved to Device Storage", color = Color.White, fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text("All required photos captured", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = null,
+                            tint = Color.Gray,
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Camera Permission Required",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
+                        ) {
+                            Text("Grant Permission")
+                        }
+                    }
+                }
+
+                // Loading overlay when taking photo
+                if (isCapturing) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = TelecomPrimary)
+                    }
+                }
+            }
+
+            // Photo Gallery Strip (Bottom)
+            if (capturedPhotos.isNotEmpty()) {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF2C2C2C))
+                        .padding(vertical = 12.dp, horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(capturedPhotos) { photoPath ->
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(2.dp, Color.White, RoundedCornerShape(8.dp))
+                        ) {
+                            AsyncImage(
+                                model = File(photoPath),
+                                contentDescription = "Thumb",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                            // Delete button
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(2.dp)
+                                    .size(24.dp)
+                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                    .clickable { viewModel.removePhoto(photoPath) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -253,42 +252,47 @@ fun PhotoCaptureScreen(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color(0xFF1E1E1E)
             ) {
-                if (!isPhotoCaptured) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Flash Toggle
+                    IconButton(
+                        onClick = {
+                            flashMode = if (flashMode == ImageCapture.FLASH_MODE_OFF) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
+                        },
+                        enabled = capturedPhotos.size < maxPhotos
                     ) {
-                        IconButton(
-                            onClick = {
-                                flashMode = if (flashMode == ImageCapture.FLASH_MODE_OFF) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (flashMode == ImageCapture.FLASH_MODE_ON) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                                contentDescription = "Flash",
-                                tint = Color.White
-                            )
-                        }
+                        Icon(
+                            imageVector = if (flashMode == ImageCapture.FLASH_MODE_ON) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                            contentDescription = "Flash",
+                            tint = if (capturedPhotos.size < maxPhotos) Color.White else Color.DarkGray
+                        )
+                    }
 
-                        // Real Shutter Button
+                    // Shutter Button
+                    if (capturedPhotos.size < maxPhotos) {
                         IconButton(
                             onClick = {
+                                if (isCapturing) return@IconButton
+                                isCapturing = true
                                 val poleId = draftPole?.id ?: "P-019-019"
                                 takePhoto(
                                     context = context,
                                     imageCapture = imageCaptureInstance,
                                     executor = cameraExecutor,
                                     poleId = poleId,
+                                    lat = draftPole?.latitude ?: 0.0,
+                                    lng = draftPole?.longitude ?: 0.0,
                                     onPhotoSaved = { file ->
-                                        capturedPhotoFile = file
-                                        isPhotoCaptured = true
+                                        viewModel.addPhotoAndContinue(file.absolutePath)
+                                        isCapturing = false
                                     },
                                     onError = {
-                                        // Fallback if camera error
-                                        isPhotoCaptured = true
+                                        isCapturing = false
                                     }
                                 )
                             },
@@ -305,57 +309,19 @@ fun PhotoCaptureScreen(
                                     .background(TelecomPrimary)
                             )
                         }
-
-                        IconButton(
-                            onClick = {
-                                cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-                                    CameraSelector.DEFAULT_FRONT_CAMERA
-                                } else CameraSelector.DEFAULT_BACK_CAMERA
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FlipCameraAndroid,
-                                contentDescription = "Flip",
-                                tint = Color.White
-                            )
-                        }
+                    } else {
+                        Spacer(modifier = Modifier.size(72.dp)) // Maintain spacing when shutter is hidden
                     }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { isPhotoCaptured = false },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Retake")
-                        }
 
-                        Button(
-                            onClick = {
-                                val path = capturedPhotoFile?.absolutePath ?: "photo_${draftPole?.id ?: "P-019-019"}.jpg"
-                                viewModel.usePhotoAndContinue(path)
-                                onUsePhotoClick()
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Use Photo", fontWeight = FontWeight.Bold)
-                        }
+                    // Finish / Next Button
+                    Button(
+                        onClick = onUsePhotoClick,
+                        enabled = capturedPhotos.isNotEmpty() && !isCapturing,
+                        colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
+                    ) {
+                        Text(if (capturedPhotos.size >= maxPhotos) "Finish" else "Next", fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
                 }
             }

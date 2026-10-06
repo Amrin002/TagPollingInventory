@@ -19,11 +19,13 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
-import java.io.File
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import java.io.File
 
 @Composable
 fun ReviewPoleScreen(
@@ -248,32 +250,38 @@ fun ReviewPoleScreen(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
+                            val photoCount = draftPole?.photoPaths?.size ?: 0
                             Text(
-                                text = "✓ Photo Attached",
+                                text = "✓ $photoCount Photos Attached",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32)
                             )
-                            Text(
-                                text = draftPole?.photoPath ?: "photo_P-019-019.jpg",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray
-                            )
                         }
                     }
 
-                    val path = draftPole?.photoPath
-                    if (!path.isNullOrEmpty() && File(path).exists()) {
+                    val paths = draftPole?.photoPaths ?: emptyList()
+                    if (paths.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        AsyncImage(
-                            model = File(path),
-                            contentDescription = "Pole Photo Preview",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(180.dp)
-                                .clip(RoundedCornerShape(8.dp)),
-                            contentScale = ContentScale.Crop
-                        )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(paths) { path ->
+                                val file = File(path)
+                                if (file.exists()) {
+                                    AsyncImage(
+                                        model = file,
+                                        contentDescription = "Pole Photo Preview",
+                                        modifier = Modifier
+                                            .width(200.dp)
+                                            .height(180.dp)
+                                            .clip(RoundedCornerShape(8.dp)),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

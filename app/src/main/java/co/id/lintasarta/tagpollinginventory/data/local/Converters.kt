@@ -21,6 +21,19 @@ class Converters {
         return gson.fromJson(value, type) ?: emptySet()
     }
 
+    // --- List<String> for Photo Paths ---
+    @TypeConverter
+    fun fromStringList(value: List<String>?): String {
+        return gson.toJson(value)
+    }
+
+    @TypeConverter
+    fun toStringList(value: String): List<String> {
+        if (value.isEmpty()) return emptyList()
+        val type = object : TypeToken<List<String>>() {}.type
+        return gson.fromJson(value, type) ?: emptyList()
+    }
+
     // --- Pair<Double, Double> for Coordinates ---
     @TypeConverter
     fun fromDoublePair(value: Pair<Double, Double>?): String {

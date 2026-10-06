@@ -180,7 +180,7 @@ class InventoryRepository(private val context: Context) {
             cableCondition = CableCondition.GOOD,
             equipment = setOf("ODP", "Closure"),
             notes = "",
-            photoPath = null,
+            photoPaths = emptyList(),
             status = TagStatus.NOT_TAGGED,
             poleCode = poleCodeStr
         )
@@ -260,9 +260,24 @@ class InventoryRepository(private val context: Context) {
         }
     }
 
-    fun updateDraftPhoto(photoPath: String) {
+    fun addDraftPhoto(photoPath: String) {
         val current = _currentDraftPole.value ?: return
-        val updated = current.copy(photoPath = photoPath)
+        val currentList = current.photoPaths.toMutableList()
+        if (currentList.size < 3) {
+            currentList.add(photoPath)
+            val updated = current.copy(photoPaths = currentList)
+            _currentDraftPole.value = updated
+            scope.launch {
+                dao.updatePole(updated)
+            }
+        }
+    }
+    
+    fun removeDraftPhoto(photoPath: String) {
+        val current = _currentDraftPole.value ?: return
+        val currentList = current.photoPaths.toMutableList()
+        currentList.remove(photoPath)
+        val updated = current.copy(photoPaths = currentList)
         _currentDraftPole.value = updated
         scope.launch {
             dao.updatePole(updated)
