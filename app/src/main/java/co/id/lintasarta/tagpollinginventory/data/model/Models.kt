@@ -1,5 +1,8 @@
 package co.id.lintasarta.tagpollinginventory.data.model
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
 enum class PoleType(val displayName: String) {
     CONCRETE("Concrete"),
     STEEL("Steel"),
@@ -47,8 +50,9 @@ enum class ExportFormat(val displayName: String, val extension: String) {
     KMZ("KMZ", "kmz")
 }
 
+@Entity(tableName = "poles")
 data class Pole(
-    val id: String,
+    @PrimaryKey val id: String,
     val segmentId: String,
     val sequence: Int,
     val latitude: Double,
@@ -69,8 +73,9 @@ data class Pole(
     val poleCode: String = "" // Business Identifier (e.g. ABNTKBPL-001)
 )
 
+@Entity(tableName = "segments")
 data class Segment(
-    val id: String,
+    @PrimaryKey val id: String,
     val projectId: String = "PRJ-AMB-01",
     val name: String,
     val description: String = "",
@@ -89,8 +94,9 @@ data class Segment(
     val currentSequence: Int = 0
 )
 
+@Entity(tableName = "projects")
 data class Project(
-    val id: String,
+    @PrimaryKey val id: String,
     val name: String,
     val location: String,
     val totalPoles: Int,
@@ -100,8 +106,9 @@ data class Project(
     val segments: List<Segment>
 )
 
+@Entity(tableName = "export_files")
 data class ExportFile(
-    val id: String,
+    @PrimaryKey val id: String,
     val fileName: String,
     val format: ExportFormat,
     val sizeBytes: Long,

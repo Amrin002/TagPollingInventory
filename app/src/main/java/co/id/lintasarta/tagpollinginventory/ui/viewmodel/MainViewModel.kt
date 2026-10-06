@@ -373,6 +373,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(ScreenFlow.POLE_INFO)
     }
 
+    fun updatePoleLocationManually(poleId: String, lat: Double, lng: Double) {
+        repository.updatePoleLocationDirectly(poleId, lat, lng)
+    }
+
     fun savePoleInfoAndContinue(
         type: PoleType,
         condition: PoleCondition,

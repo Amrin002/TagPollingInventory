@@ -1,19 +1,27 @@
 package co.id.lintasarta.tagpollinginventory.data.repository
 
 import android.content.Context
+import co.id.lintasarta.tagpollinginventory.data.local.AppDatabase
 import co.id.lintasarta.tagpollinginventory.data.model.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.json.JSONArray
-import org.json.JSONObject
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 
 class InventoryRepository(private val context: Context) {
 
-    private val dataFile = File(context.filesDir, "inventory_data.json")
+    private val db = AppDatabase.getDatabase(context)
+    private val dao = db.inventoryDao()
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Legacy JSON file reference (used only for cleanup/migration if needed)
+    private val oldDataFile = File(context.filesDir, "inventory_data.json")
 
     private val _project = MutableStateFlow(createInitialProject())
     val project: StateFlow<Project> = _project.asStateFlow()
@@ -34,12 +42,53 @@ class InventoryRepository(private val context: Context) {
     val currentDraftPole: StateFlow<Pole?> = _currentDraftPole.asStateFlow()
 
     init {
-        loadData()
+        // Migration: If JSON exists but DB is empty, we could migrate. 
+        // For simplicity, we just delete the old JSON file now that we use Room.
+        if (oldDataFile.exists()) {
+            oldDataFile.delete()
+        }
+
+        // Start observing Room Database
+        scope.launch {
+            dao.getProjectFlow().collect { proj ->
+                if (proj != null) {
+                    _project.value = _project.value.copy(
+                        id = proj.id,
+                        name = proj.name,
+                        location = proj.location,
+                        totalPoles = proj.totalPoles,
+                        completedPoles = proj.completedPoles,
+                        conflictPoles = proj.conflictPoles,
+                        uncompletedPoles = proj.uncompletedPoles
+                    )
+                } else {
+                    // Initialize empty project in DB
+                    dao.insertProject(createInitialProject())
+                }
+            }
+        }
+
+        scope.launch {
+            dao.getAllSegmentsFlow().collect { segs ->
+                val p = _project.value
+                _project.value = p.copy(segments = segs)
+            }
+        }
+
+        scope.launch {
+            dao.getAllPolesFlow().collect { poleList ->
+                _poles.value = poleList.associateBy { it.id }
+            }
+        }
+
+        scope.launch {
+            dao.getAllExportFilesFlow().collect { files ->
+                _exportFiles.value = files
+            }
+        }
     }
 
     private fun createInitialProject(): Project {
-        // Hapus data sample, karena nanti kita punya data sendiri 
-        // Setiap data kml yang diimport akan tersimpan di segment
         return Project(
             id = "PRJ-AMB-01",
             name = "Project Utama",
@@ -48,236 +97,28 @@ class InventoryRepository(private val context: Context) {
             completedPoles = 0,
             conflictPoles = 0,
             uncompletedPoles = 0,
-            segments = emptyList() // Segments akan ditambahkan dari import KML
+            segments = emptyList()
         )
     }
 
-    private fun loadData() {
-        if (!dataFile.exists()) {
-            _poles.value = emptyMap()
-            _exportFiles.value = emptyList()
-            recalculateProjectStats()
-            saveData()
-            return
-        }
-
-        try {
-            val text = dataFile.readText()
-            val json = JSONObject(text)
-
-            // Parse project segments
-            val projectJson = json.optJSONObject("project")
-            val loadedSegments = mutableListOf<Segment>()
-            if (projectJson != null) {
-                val segmentsArr = projectJson.optJSONArray("segments")
-                if (segmentsArr != null) {
-                    for (i in 0 until segmentsArr.length()) {
-                        val segObj = segmentsArr.getJSONObject(i)
-                        loadedSegments.add(
-                            Segment(
-                                id = segObj.getString("id"),
-                                projectId = segObj.optString("projectId", "PRJ-AMB-01"),
-                                name = segObj.getString("name"),
-                                description = segObj.optString("description", ""),
-                                route = segObj.optString("route", ""),
-                                startPoint = Pair(segObj.optDouble("startLat", 0.0), segObj.optDouble("startLng", 0.0)),
-                                endPoint = Pair(segObj.optDouble("endLat", 0.0), segObj.optDouble("endLng", 0.0)),
-                                status = SegmentStatus.valueOf(segObj.optString("status", "NOT_STARTED")),
-                                totalPoles = segObj.optInt("totalPoles", 0),
-                                completedPoles = segObj.optInt("completedPoles", 0),
-                                conflictPoles = segObj.optInt("conflictPoles", 0),
-                                createdAt = segObj.optString("createdAt", ""),
-                                updatedAt = segObj.optString("updatedAt", ""),
-                                referenceRouteFileName = if (segObj.has("referenceRouteFileName") && !segObj.isNull("referenceRouteFileName")) segObj.getString("referenceRouteFileName") else null,
-                                cityCode = segObj.optString("cityCode", ""),
-                                locationCode = segObj.optString("locationCode", ""),
-                                currentSequence = segObj.optInt("currentSequence", 0)
-                            )
-                        )
-                    }
-                }
-            }
-            if (loadedSegments.isNotEmpty()) {
-                val p = _project.value
-                _project.value = p.copy(segments = loadedSegments)
-            }
-
-            // Parse poles
-            val polesJson = json.optJSONObject("poles")
-            val loadedPoles = mutableMapOf<String, Pole>()
-            if (polesJson != null) {
-                val keys = polesJson.keys()
-                while (keys.hasNext()) {
-                    val key = keys.next()
-                    val obj = polesJson.getJSONObject(key)
-                    loadedPoles[key] = Pole(
-                        id = obj.getString("id"),
-                        segmentId = obj.getString("segmentId"),
-                        sequence = obj.getInt("sequence"),
-                        latitude = obj.getDouble("latitude"),
-                        longitude = obj.getDouble("longitude"),
-                        accuracy = obj.getDouble("accuracy").toFloat(),
-                        capturedTimestamp = obj.optString("capturedTimestamp", ""),
-                        type = PoleType.valueOf(obj.optString("type", "CONCRETE")),
-                        condition = PoleCondition.valueOf(obj.optString("condition", "GOOD")),
-                        ownership = PoleOwnership.valueOf(obj.optString("ownership", "LINTASARTA")),
-                        height = obj.optString("height", "9m"),
-                        tagNumber = obj.optString("tagNumber", ""),
-                        hasFoCable = obj.optBoolean("hasFoCable", true),
-                        cableCondition = CableCondition.valueOf(obj.optString("cableCondition", "GOOD")),
-                        equipment = parseEquipmentSet(obj.optJSONArray("equipment")),
-                        notes = obj.optString("notes", ""),
-                        photoPath = if (obj.has("photoPath") && !obj.isNull("photoPath")) obj.getString("photoPath") else null,
-                        status = TagStatus.valueOf(obj.optString("status", "NOT_TAGGED")),
-                        poleCode = obj.optString("poleCode", "")
-                    )
-                }
-            }
-            _poles.value = loadedPoles
-
-            // Parse export files
-            val exportJson = json.optJSONArray("exportFiles")
-            val loadedExports = mutableListOf<ExportFile>()
-            if (exportJson != null) {
-                for (i in 0 until exportJson.length()) {
-                    val obj = exportJson.getJSONObject(i)
-                    loadedExports.add(
-                        ExportFile(
-                            id = obj.getString("id"),
-                            fileName = obj.getString("fileName"),
-                            format = ExportFormat.valueOf(obj.getString("format")),
-                            sizeBytes = obj.getLong("sizeBytes"),
-                            recordCount = obj.getInt("recordCount"),
-                            createdAt = obj.getString("createdAt"),
-                            filePath = obj.getString("filePath"),
-                            segmentName = obj.optString("segmentName", "Segment 19")
-                        )
-                    )
-                }
-            }
-            _exportFiles.value = loadedExports
-
-            recalculateProjectStats()
-        } catch (e: Exception) {
-            e.printStackTrace()
-            _poles.value = emptyMap()
-            _exportFiles.value = emptyList()
-        }
-    }
-
-    private fun parseEquipmentSet(arr: JSONArray?): Set<String> {
-        if (arr == null) return setOf("ODP", "Closure")
-        val set = mutableSetOf<String>()
-        for (i in 0 until arr.length()) {
-            set.add(arr.getString(i))
-        }
-        return set
-    }
-
     fun saveData() {
-        try {
-            val json = JSONObject()
-
-            val projectJson = JSONObject()
-            val segmentsArr = JSONArray()
-            _project.value.segments.forEach { seg ->
-                val segObj = JSONObject()
-                segObj.put("id", seg.id)
-                segObj.put("projectId", seg.projectId)
-                segObj.put("name", seg.name)
-                segObj.put("description", seg.description)
-                segObj.put("route", seg.route)
-                segObj.put("startLat", seg.startPoint.first)
-                segObj.put("startLng", seg.startPoint.second)
-                segObj.put("endLat", seg.endPoint.first)
-                segObj.put("endLng", seg.endPoint.second)
-                segObj.put("status", seg.status.name)
-                segObj.put("totalPoles", seg.totalPoles)
-                segObj.put("completedPoles", seg.completedPoles)
-                segObj.put("conflictPoles", seg.conflictPoles)
-                segObj.put("createdAt", seg.createdAt)
-                segObj.put("updatedAt", seg.updatedAt)
-                segObj.put("referenceRouteFileName", seg.referenceRouteFileName)
-                segObj.put("cityCode", seg.cityCode)
-                segObj.put("locationCode", seg.locationCode)
-                segObj.put("currentSequence", seg.currentSequence)
-                segmentsArr.put(segObj)
-            }
-            projectJson.put("segments", segmentsArr)
-            json.put("project", projectJson)
-
-            val polesJson = JSONObject()
-            _poles.value.forEach { (id, pole) ->
-                val obj = JSONObject()
-                obj.put("id", pole.id)
-                obj.put("segmentId", pole.segmentId)
-                obj.put("sequence", pole.sequence)
-                obj.put("latitude", pole.latitude)
-                obj.put("longitude", pole.longitude)
-                obj.put("accuracy", pole.accuracy)
-                obj.put("capturedTimestamp", pole.capturedTimestamp)
-                obj.put("type", pole.type.name)
-                obj.put("condition", pole.condition.name)
-                obj.put("ownership", pole.ownership.name)
-                obj.put("height", pole.height)
-                obj.put("tagNumber", pole.tagNumber)
-                obj.put("hasFoCable", pole.hasFoCable)
-                obj.put("cableCondition", pole.cableCondition.name)
-
-                val eqArr = JSONArray()
-                pole.equipment.forEach { eqArr.put(it) }
-                obj.put("equipment", eqArr)
-
-                obj.put("notes", pole.notes)
-                obj.put("photoPath", pole.photoPath)
-                obj.put("status", pole.status.name)
-                obj.put("poleCode", pole.poleCode)
-
-                polesJson.put(id, obj)
-            }
-            json.put("poles", polesJson)
-
-            val exportArr = JSONArray()
-            _exportFiles.value.forEach { file ->
-                val obj = JSONObject()
-                obj.put("id", file.id)
-                obj.put("fileName", file.fileName)
-                obj.put("format", file.format.name)
-                obj.put("sizeBytes", file.sizeBytes)
-                obj.put("recordCount", file.recordCount)
-                obj.put("createdAt", file.createdAt)
-                obj.put("filePath", file.filePath)
-                obj.put("segmentName", file.segmentName)
-                exportArr.put(obj)
-            }
-            json.put("exportFiles", exportArr)
-
-            dataFile.writeText(json.toString(2))
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        // No-op for direct callers since Room auto-persists on insert/update.
+        // We only explicitly persist project stats recalculation here if needed,
+        // but recalculateProjectStats already saves to Room.
     }
 
     fun addSegment(segment: Segment) {
-        val currentProj = _project.value
-        val updatedSegments = currentProj.segments.toMutableList()
-        val index = updatedSegments.indexOfFirst { it.id == segment.id }
-        if (index != -1) {
-            updatedSegments[index] = segment
-        } else {
-            updatedSegments.add(segment)
+        scope.launch {
+            dao.insertSegment(segment)
+            recalculateProjectStats()
         }
-        _project.value = currentProj.copy(segments = updatedSegments)
-        saveData()
     }
 
     fun markSegmentCompleted(segmentId: String) {
-        val currentProj = _project.value
-        val updatedSegments = currentProj.segments.map { 
-            if (it.id == segmentId) it.copy(status = SegmentStatus.COMPLETED) else it 
+        scope.launch {
+            dao.updateSegmentStatus(segmentId, SegmentStatus.COMPLETED.name)
+            recalculateProjectStats()
         }
-        _project.value = currentProj.copy(segments = updatedSegments)
-        saveData()
     }
 
     fun selectSegment(segmentId: String) {
@@ -314,9 +155,9 @@ class InventoryRepository(private val context: Context) {
 
         if (segment != null) {
             val updatedSegment = segment.copy(currentSequence = nextSeq)
-            val currentProj = _project.value
-            val updatedSegments = currentProj.segments.map { if (it.id == segment.id) updatedSegment else it }
-            _project.value = currentProj.copy(segments = updatedSegments)
+            scope.launch {
+                dao.updateSegment(updatedSegment)
+            }
         }
 
         val defaultLat = if (currentLat != 0.0) currentLat else -3.6954
@@ -347,6 +188,11 @@ class InventoryRepository(private val context: Context) {
         _currentDraftPole.value = newPole
         _targetPoleId.value = poleId
         _selectedSegmentId.value = segmentId
+        
+        // Simpan langsung ke Room
+        scope.launch {
+            dao.insertPole(newPole)
+        }
         return newPole
     }
 
@@ -362,12 +208,27 @@ class InventoryRepository(private val context: Context) {
     fun updateDraftLocation(lat: Double, lng: Double, accuracy: Float) {
         val current = _currentDraftPole.value ?: return
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
-        _currentDraftPole.value = current.copy(
+        val updated = current.copy(
             latitude = lat,
             longitude = lng,
             accuracy = accuracy,
             capturedTimestamp = now
         )
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.updatePole(updated)
+        }
+    }
+    
+    fun updatePoleLocationDirectly(poleId: String, lat: Double, lng: Double) {
+        val pole = _poles.value[poleId] ?: return
+        val updated = pole.copy(latitude = lat, longitude = lng)
+        scope.launch {
+            dao.updatePole(updated)
+        }
+        if (_currentDraftPole.value?.id == poleId) {
+            _currentDraftPole.value = updated
+        }
     }
 
     fun updateDraftAttributes(
@@ -382,7 +243,7 @@ class InventoryRepository(private val context: Context) {
         notes: String
     ) {
         val current = _currentDraftPole.value ?: return
-        _currentDraftPole.value = current.copy(
+        val updated = current.copy(
             type = type,
             condition = condition,
             ownership = ownership,
@@ -393,11 +254,19 @@ class InventoryRepository(private val context: Context) {
             equipment = equipment,
             notes = notes
         )
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.updatePole(updated)
+        }
     }
 
     fun updateDraftPhoto(photoPath: String) {
         val current = _currentDraftPole.value ?: return
-        _currentDraftPole.value = current.copy(photoPath = photoPath)
+        val updated = current.copy(photoPath = photoPath)
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.updatePole(updated)
+        }
     }
 
     fun saveDraftPole(): Pole? {
@@ -413,21 +282,21 @@ class InventoryRepository(private val context: Context) {
             status = finalStatus
         )
 
-        val map = _poles.value.toMutableMap()
-        map[savedPole.id] = savedPole
-        _poles.value = map
-
-        recalculateProjectStats()
-        saveData()
+        scope.launch {
+            dao.updatePole(savedPole)
+            recalculateProjectStats()
+        }
+        
         return savedPole
     }
 
-    private fun recalculateProjectStats() {
-        val currentProj = _project.value
-        val polesMap = _poles.value
+    private suspend fun recalculateProjectStats() {
+        val currentProj = dao.getProjectSync() ?: return
+        val allSegments = dao.getAllSegmentsSync()
+        val allPoles = dao.getAllPolesSync()
 
-        val updatedSegments = currentProj.segments.map { seg ->
-            val segPoles = polesMap.values.filter { it.segmentId == seg.id }
+        val updatedSegments = allSegments.map { seg ->
+            val segPoles = allPoles.filter { it.segmentId == seg.id }
             val total = segPoles.size
             val completed = segPoles.count { it.status == TagStatus.COMPLETED }
             val conflict = segPoles.count { it.status == TagStatus.CONFLICT }
@@ -444,39 +313,47 @@ class InventoryRepository(private val context: Context) {
             )
         }
 
+        // Simpan pembaruan status segmen ke database
+        dao.insertSegments(updatedSegments)
+
         val totalPoles = updatedSegments.sumOf { it.totalPoles }
         val completedPoles = updatedSegments.sumOf { it.completedPoles }
         val conflictPoles = updatedSegments.sumOf { it.conflictPoles }
 
-        _project.value = currentProj.copy(
+        val updatedProject = currentProj.copy(
             totalPoles = totalPoles,
             completedPoles = completedPoles,
             conflictPoles = conflictPoles,
-            uncompletedPoles = totalPoles - completedPoles,
-            segments = updatedSegments
+            uncompletedPoles = totalPoles - completedPoles
         )
+        
+        dao.updateProject(updatedProject)
     }
 
     fun addExportFile(file: ExportFile) {
-        val list = _exportFiles.value.toMutableList()
-        list.add(0, file)
-        _exportFiles.value = list
-        saveData()
+        scope.launch {
+            dao.insertExportFile(file)
+        }
     }
 
     fun deleteExportFile(fileId: String) {
-        val list = _exportFiles.value.filter { it.id != fileId }
-        _exportFiles.value = list
-        saveData()
+        scope.launch {
+            dao.deleteExportFile(fileId)
+        }
     }
 
     fun clearAllData() {
-        dataFile.delete()
-        _poles.value = emptyMap()
-        _exportFiles.value = emptyList()
+        scope.launch {
+            dao.clearProjects()
+            dao.clearSegments()
+            dao.clearPoles()
+            dao.clearExportFiles()
+            
+            // Re-initialize barebone project
+            dao.insertProject(createInitialProject())
+        }
+        
         _targetPoleId.value = ""
         _currentDraftPole.value = null
-        recalculateProjectStats()
-        saveData()
     }
 }
