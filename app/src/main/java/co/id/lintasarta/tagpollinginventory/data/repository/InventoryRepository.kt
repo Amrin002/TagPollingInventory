@@ -137,6 +137,14 @@ class InventoryRepository(private val context: Context) {
         if (pole != null) {
             _selectedSegmentId.value = pole.segmentId
             _currentDraftPole.value = pole
+        } else {
+            scope.launch {
+                val dbPole = dao.getPoleById(poleId)
+                if (dbPole != null) {
+                    _selectedSegmentId.value = dbPole.segmentId
+                    _currentDraftPole.value = dbPole
+                }
+            }
         }
     }
 
@@ -197,37 +205,80 @@ class InventoryRepository(private val context: Context) {
     }
 
     fun startDraftForPole(poleId: String) {
-        val existing = _poles.value[poleId] ?: return
+        _targetPoleId.value = poleId
+        val existing = _poles.value[poleId]
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
-        _currentDraftPole.value = existing.copy(
-            capturedTimestamp = if (existing.capturedTimestamp.isEmpty()) now else existing.capturedTimestamp,
-            accuracy = 2.8f
-        )
+        if (existing != null) {
+            _currentDraftPole.value = existing.copy(
+                capturedTimestamp = if (existing.capturedTimestamp.isEmpty()) now else existing.capturedTimestamp,
+                accuracy = 2.8f
+            )
+        } else {
+            scope.launch {
+                val dbPole = dao.getPoleById(poleId)
+                if (dbPole != null) {
+                    _currentDraftPole.value = dbPole.copy(
+                        capturedTimestamp = if (dbPole.capturedTimestamp.isEmpty()) now else dbPole.capturedTimestamp,
+                        accuracy = 2.8f
+                    )
+                }
+            }
+        }
     }
 
     fun updateDraftLocation(lat: Double, lng: Double, accuracy: Float) {
-        val current = _currentDraftPole.value ?: return
+        val current = _currentDraftPole.value
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
-        val updated = current.copy(
-            latitude = lat,
-            longitude = lng,
-            accuracy = accuracy,
-            capturedTimestamp = now
-        )
-        _currentDraftPole.value = updated
-        scope.launch {
-            dao.updatePole(updated)
+        if (current != null) {
+            val updated = current.copy(
+                latitude = lat,
+                longitude = lng,
+                accuracy = accuracy,
+                capturedTimestamp = now
+            )
+            _currentDraftPole.value = updated
+            scope.launch {
+                dao.updatePole(updated)
+            }
+        } else {
+            val targetId = _targetPoleId.value
+            scope.launch {
+                val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
+                if (pole != null) {
+                    val updated = pole.copy(
+                        latitude = lat,
+                        longitude = lng,
+                        accuracy = accuracy,
+                        capturedTimestamp = now
+                    )
+                    _currentDraftPole.value = updated
+                    dao.updatePole(updated)
+                }
+            }
         }
     }
     
     fun updatePoleLocationDirectly(poleId: String, lat: Double, lng: Double) {
-        val pole = _poles.value[poleId] ?: return
-        val updated = pole.copy(latitude = lat, longitude = lng)
-        scope.launch {
-            dao.updatePole(updated)
-        }
-        if (_currentDraftPole.value?.id == poleId) {
-            _currentDraftPole.value = updated
+        val pole = _poles.value[poleId]
+        if (pole != null) {
+            val updated = pole.copy(latitude = lat, longitude = lng)
+            scope.launch {
+                dao.updatePole(updated)
+            }
+            if (_currentDraftPole.value?.id == poleId) {
+                _currentDraftPole.value = updated
+            }
+        } else {
+            scope.launch {
+                val dbPole = dao.getPoleById(poleId)
+                if (dbPole != null) {
+                    val updated = dbPole.copy(latitude = lat, longitude = lng)
+                    dao.updatePole(updated)
+                    if (_currentDraftPole.value?.id == poleId) {
+                        _currentDraftPole.value = updated
+                    }
+                }
+            }
         }
     }
 
@@ -242,50 +293,107 @@ class InventoryRepository(private val context: Context) {
         equipment: Set<String>,
         notes: String
     ) {
-        val current = _currentDraftPole.value ?: return
-        val updated = current.copy(
-            type = type,
-            condition = condition,
-            ownership = ownership,
-            height = height,
-            tagNumber = tagNumber,
-            hasFoCable = hasFoCable,
-            cableCondition = cableCondition,
-            equipment = equipment,
-            notes = notes
-        )
-        _currentDraftPole.value = updated
-        scope.launch {
-            dao.updatePole(updated)
+        val current = _currentDraftPole.value
+        if (current != null) {
+            val updated = current.copy(
+                type = type,
+                condition = condition,
+                ownership = ownership,
+                height = height,
+                tagNumber = tagNumber,
+                hasFoCable = hasFoCable,
+                cableCondition = cableCondition,
+                equipment = equipment,
+                notes = notes
+            )
+            _currentDraftPole.value = updated
+            scope.launch {
+                dao.updatePole(updated)
+            }
+        } else {
+            val targetId = _targetPoleId.value
+            scope.launch {
+                val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
+                if (pole != null) {
+                    val updated = pole.copy(
+                        type = type,
+                        condition = condition,
+                        ownership = ownership,
+                        height = height,
+                        tagNumber = tagNumber,
+                        hasFoCable = hasFoCable,
+                        cableCondition = cableCondition,
+                        equipment = equipment,
+                        notes = notes
+                    )
+                    _currentDraftPole.value = updated
+                    dao.updatePole(updated)
+                }
+            }
         }
     }
 
     fun addDraftPhoto(photoPath: String) {
-        val current = _currentDraftPole.value ?: return
-        val currentList = current.photoPaths.toMutableList()
-        if (currentList.size < 3) {
-            currentList.add(photoPath)
-            val updated = current.copy(photoPaths = currentList)
-            _currentDraftPole.value = updated
+        val current = _currentDraftPole.value
+        if (current != null) {
+            val currentList = current.photoPaths.toMutableList()
+            if (currentList.size < 3) {
+                currentList.add(photoPath)
+                val updated = current.copy(photoPaths = currentList)
+                _currentDraftPole.value = updated
+                scope.launch {
+                    dao.updatePole(updated)
+                }
+            }
+        } else {
+            val targetId = _targetPoleId.value
             scope.launch {
-                dao.updatePole(updated)
+                val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
+                if (pole != null) {
+                    val currentList = pole.photoPaths.toMutableList()
+                    if (currentList.size < 3) {
+                        currentList.add(photoPath)
+                        val updated = pole.copy(photoPaths = currentList)
+                        _currentDraftPole.value = updated
+                        dao.updatePole(updated)
+                    }
+                }
             }
         }
     }
     
     fun removeDraftPhoto(photoPath: String) {
-        val current = _currentDraftPole.value ?: return
-        val currentList = current.photoPaths.toMutableList()
-        currentList.remove(photoPath)
-        val updated = current.copy(photoPaths = currentList)
-        _currentDraftPole.value = updated
-        scope.launch {
-            dao.updatePole(updated)
+        val current = _currentDraftPole.value
+        if (current != null) {
+            val currentList = current.photoPaths.toMutableList()
+            currentList.remove(photoPath)
+            val updated = current.copy(photoPaths = currentList)
+            _currentDraftPole.value = updated
+            scope.launch {
+                dao.updatePole(updated)
+            }
+        } else {
+            val targetId = _targetPoleId.value
+            scope.launch {
+                val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
+                if (pole != null) {
+                    val currentList = pole.photoPaths.toMutableList()
+                    currentList.remove(photoPath)
+                    val updated = pole.copy(photoPaths = currentList)
+                    _currentDraftPole.value = updated
+                    dao.updatePole(updated)
+                }
+            }
         }
     }
 
     fun saveDraftPole(): Pole? {
-        val draft = _currentDraftPole.value ?: return null
+        var draft = _currentDraftPole.value
+        if (draft == null && _targetPoleId.value.isNotEmpty()) {
+            draft = _poles.value[_targetPoleId.value]
+        }
+        if (draft == null) return null
+
         val now = if (draft.capturedTimestamp.isEmpty()) {
             SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
         } else draft.capturedTimestamp
@@ -296,6 +404,8 @@ class InventoryRepository(private val context: Context) {
             capturedTimestamp = now,
             status = finalStatus
         )
+
+        _currentDraftPole.value = savedPole
 
         scope.launch {
             dao.updatePole(savedPole)

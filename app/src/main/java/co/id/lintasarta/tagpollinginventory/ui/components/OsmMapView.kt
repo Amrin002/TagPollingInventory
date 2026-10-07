@@ -11,6 +11,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.data.model.ImportedRoute
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
 import co.id.lintasarta.tagpollinginventory.data.model.TagStatus
@@ -48,6 +57,8 @@ fun OsmMapView(
             controller.setZoom(16.5)
         }
     }
+    
+    var initialCenterDone by remember { mutableStateOf(false) }
 
     LaunchedEffect(poles, selectedPoleId, userLocation, importedRoute) {
         mapView.overlays.clear()
@@ -151,28 +162,68 @@ fun OsmMapView(
             mapView.overlays.add(userMarker)
         }
 
-        // 4. Center map to target pole ONLY if it's the first time or location hasn't been set yet
-        val targetPole = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
-        
-        // Kita simpan status apakah map sudah pernah di-center sebelumnya
-        // Untuk saat ini, asumsikan jika zoom masih rendah (default/awal), kita arahkan ke target.
-        if (mapView.zoomLevelDouble < 10) {
-            if (targetPole != null) {
-                mapView.controller.setCenter(GeoPoint(targetPole.latitude, targetPole.longitude))
-                mapView.controller.setZoom(16.5)
-            } else if (allGeoPoints.isNotEmpty()) {
-                val box = BoundingBox.fromGeoPoints(allGeoPoints)
-                mapView.zoomToBoundingBox(box, true, 80)
+        var didCenter = false
+        if (!initialCenterDone && mapView.zoomLevelDouble < 10.0) {
+            if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
+                mapView.controller.setCenter(GeoPoint(userLocation.latitude, userLocation.longitude))
+                mapView.controller.setZoom(18.0)
+                initialCenterDone = true
+                didCenter = true
+            } else {
+                val targetPole = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
+                if (targetPole != null && targetPole.latitude != 0.0) {
+                    mapView.controller.setCenter(GeoPoint(targetPole.latitude, targetPole.longitude))
+                    mapView.controller.setZoom(17.0)
+                    initialCenterDone = true
+                    didCenter = true
+                } else {
+                    val validPoints = allGeoPoints.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+                    if (validPoints.isNotEmpty()) {
+                        val box = BoundingBox.fromGeoPoints(validPoints)
+                        mapView.zoomToBoundingBox(box, true, 80)
+                        initialCenterDone = true
+                        didCenter = true
+                    }
+                }
+            }
+            
+            // Fallback to center of Indonesia if no other location is available
+            // but DO NOT set initialCenterDone to true so that when GPS arrives, it can center.
+            if (!didCenter) {
+                mapView.controller.setCenter(GeoPoint(-0.7893, 113.9213))
+                mapView.controller.setZoom(5.0)
             }
         }
 
         mapView.invalidate()
     }
 
-    AndroidView(
-        factory = { mapView },
-        modifier = modifier.fillMaxSize()
-    )
+    Box(modifier = modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { mapView },
+            modifier = Modifier.fillMaxSize()
+        )
+        
+        FloatingActionButton(
+            onClick = {
+                if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
+                    mapView.controller.animateTo(GeoPoint(userLocation.latitude, userLocation.longitude), 18.0, 1000L)
+                } else {
+                    val target = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
+                    if (target != null && target.latitude != 0.0) {
+                        mapView.controller.animateTo(GeoPoint(target.latitude, target.longitude), 17.0, 1000L)
+                    }
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 220.dp, end = 16.dp),
+            containerColor = TelecomPrimary,
+            contentColor = Color.White
+        ) {
+            Icon(Icons.Default.MyLocation, contentDescription = "Center Map")
+        }
+    }
 }
 
 fun calculateRealDistanceMeters(

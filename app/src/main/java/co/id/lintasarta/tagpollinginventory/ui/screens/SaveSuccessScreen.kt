@@ -32,6 +32,7 @@ fun SaveSuccessScreen(
     onBackToSegment: () -> Unit
 ) {
     val draftPole by viewModel.currentDraftPole.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     Column(
         modifier = Modifier
@@ -97,21 +98,21 @@ fun SaveSuccessScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFE3F2FD)
+                    color = if (networkStatus.isOnline) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)
                 ) {
                     Text(
-                        text = "LOCAL ONLY",
+                        text = if (networkStatus.isOnline) "SAVED (WAITING SYNC)" else "LOCAL ONLY",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = TelecomPrimary
+                        color = if (networkStatus.isOnline) Color(0xFF2E7D32) else TelecomPrimary
                     )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "Data has been saved locally on this device.",
+                    text = if (networkStatus.isOnline) "Data is saved locally and queued for server sync." else "Data has been saved locally. Connect to internet to sync.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = Color(0xFF37474F)

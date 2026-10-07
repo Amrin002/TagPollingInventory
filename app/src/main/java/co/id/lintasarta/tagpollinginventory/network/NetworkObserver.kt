@@ -16,6 +16,15 @@ data class NetworkStatus(
 
 class NetworkObserver(context: Context) {
 
+    companion object {
+        /**
+         * Set this to true during development to force the app into Offline Mode.
+         * Regardless of your actual device Wi-Fi or Cellular state, 
+         * the app will behave as if it has no internet connection.
+         */
+        const val FORCE_OFFLINE_MODE = false
+    }
+
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
@@ -56,6 +65,10 @@ class NetworkObserver(context: Context) {
     }
 
     private fun getInitialNetworkStatus(): NetworkStatus {
+        if (FORCE_OFFLINE_MODE) {
+            return NetworkStatus(isOnline = false, connectionType = "Forced Offline (Dev)")
+        }
+
         val activeNetwork = connectivityManager.activeNetwork
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork)
         val isOnline = caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

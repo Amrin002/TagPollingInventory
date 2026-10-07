@@ -33,6 +33,7 @@ fun SegmentListScreen(
     val project by viewModel.project.collectAsState()
     val filter by viewModel.segmentFilter.collectAsState()
     val searchQuery by viewModel.segmentSearchQuery.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     val filteredSegments = remember(project.segments, filter, searchQuery) {
         project.segments.filter { seg ->
@@ -82,10 +83,10 @@ fun SegmentListScreen(
 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = Color.White.copy(alpha = 0.2f)
+                    color = if (networkStatus.isOnline) Color(0xFF2E7D32) else Color(0xFFEF6C00)
                 ) {
                     Text(
-                        text = "OFFLINE",
+                        text = if (networkStatus.isOnline) "ONLINE" else "OFFLINE",
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,

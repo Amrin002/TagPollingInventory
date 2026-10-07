@@ -2,6 +2,7 @@ package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -31,14 +32,18 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
 import co.id.lintasarta.tagpollinginventory.camera.CameraPreview
 import co.id.lintasarta.tagpollinginventory.camera.takePhoto
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
+import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun PhotoCaptureScreen(
@@ -50,6 +55,8 @@ fun PhotoCaptureScreen(
     val draftPole by viewModel.currentDraftPole.collectAsState()
     val capturedPhotos = draftPole?.photoPaths ?: emptyList()
     val maxPhotos = 3
+    val networkStatus by viewModel.networkStatus.collectAsState()
+    val currentLocation by viewModel.currentLocation.collectAsState()
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -83,16 +90,18 @@ fun PhotoCaptureScreen(
             TopBar(
                 title = "Capture Pole Photos",
                 subtitle = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "P-019-019",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color.Black)
-        ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(Color.Black)
+            ) {
             // Instruction Header
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -154,6 +163,58 @@ fun PhotoCaptureScreen(
                                 style = Stroke(width = 4f)
                             )
                         }
+
+                        // GPS & Distance Overlay Badges
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.GpsFixed,
+                                        contentDescription = null,
+                                        tint = if (currentLocation.accuracy <= 5f) Color(0xFF4CAF50) else Color(0xFFFFB74D),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("GPS ±${String.format(Locale.US, "%.1f", currentLocation.accuracy)}m", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                                }
+                            }
+
+                            if (draftPole != null) {
+                                val distance = calculateRealDistanceMeters(
+                                    currentLocation.latitude, currentLocation.longitude,
+                                    draftPole!!.latitude, draftPole!!.longitude
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.Black.copy(alpha = 0.6f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Straighten,
+                                            contentDescription = null,
+                                            tint = if (distance <= 15f) Color(0xFF4CAF50) else Color(0xFFFFB74D),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Distance ~${String.format(Locale.US, "%.0f", distance)}m", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
                     } else {
                         // Max photos reached preview
                         Box(
@@ -200,12 +261,8 @@ fun PhotoCaptureScreen(
                     }
                 }
 
-                // Loading overlay when taking photo
-                if (isCapturing) {
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = TelecomPrimary)
-                    }
-                }
+                // Remove the loading overlay from the main Viewfinder box 
+                // because it forces full recomposition of the CameraPreview, which can interrupt capture.
             }
 
             // Photo Gallery Strip (Bottom)
@@ -291,8 +348,9 @@ fun PhotoCaptureScreen(
                                         viewModel.addPhotoAndContinue(file.absolutePath)
                                         isCapturing = false
                                     },
-                                    onError = {
+                                    onError = { e ->
                                         isCapturing = false
+                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                                     }
                                 )
                             },
@@ -326,5 +384,31 @@ fun PhotoCaptureScreen(
                 }
             }
         }
-    }
+        
+        // Overlay directly inside the Box, avoids Dialog which can destroy SurfaceView
+        if (isCapturing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .clickable(enabled = false) {}, // Intercept clicks
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(100.dp)
+                        .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = TelecomPrimary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Processing...", color = Color.White, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        } // Close the Box
+    } // Close the Scaffold
 }

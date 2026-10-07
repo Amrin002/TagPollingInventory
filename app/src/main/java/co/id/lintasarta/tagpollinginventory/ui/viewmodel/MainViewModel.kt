@@ -18,6 +18,7 @@ import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.parser.KmlRouteParser
 import co.id.lintasarta.tagpollinginventory.parser.KmzRouteParser
 import co.id.lintasarta.tagpollinginventory.service.RouteDeviationService
+import co.id.lintasarta.tagpollinginventory.service.MapDownloaderService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -65,6 +66,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val kmlParser = KmlRouteParser()
     private val kmzParser = KmzRouteParser()
     private val deviationService = RouteDeviationService()
+    private val mapDownloader = MapDownloaderService(application)
 
     private val _currentTab = MutableStateFlow(AppTab.DASHBOARD)
     val currentTab: StateFlow<AppTab> = _currentTab.asStateFlow()
@@ -132,6 +134,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastGeneratedExport = MutableStateFlow<ExportFile?>(null)
     val lastGeneratedExport: StateFlow<ExportFile?> = _lastGeneratedExport.asStateFlow()
 
+    // Map Downloader State
+    val isMapDownloading = mapDownloader.isDownloading
+    val mapDownloadProgress = mapDownloader.progressPercent
+    val mapDownloadStatus = mapDownloader.downloadStatus
+    
+    private val _mapCacheSizeMB = MutableStateFlow(0.0)
+    val mapCacheSizeMB: StateFlow<Double> = _mapCacheSizeMB.asStateFlow()
+
     // GPS Status State
     private val _gpsAccuracy = MutableStateFlow(2.8f)
     val gpsAccuracy: StateFlow<Float> = _gpsAccuracy.asStateFlow()
@@ -140,10 +150,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val gpsIsStable: StateFlow<Boolean> = _gpsIsStable.asStateFlow()
 
     init {
-        // Clear old sample data to ensure clean state
-        repository.clearAllData()
-        routeRepository.clearAllRoutes()
-
         viewModelScope.launch {
             locationProvider.currentLocation.collect { loc ->
                 _gpsAccuracy.value = loc.accuracy
@@ -496,5 +502,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         repository.clearAllData()
         routeRepository.clearAllRoutes()
         switchTab(AppTab.DASHBOARD)
+    }
+
+    // Map Downloader
+    fun startMapDownload(centerLat: Double, centerLng: Double, radiusKm: Double) {
+        viewModelScope.launch {
+            mapDownloader.downloadMapArea(centerLat, centerLng, radiusKm = radiusKm)
+            updateMapCacheSize()
+        }
+    }
+
+    fun cancelMapDownload() {
+        mapDownloader.cancelDownload()
+    }
+
+    fun clearMapCache() {
+        viewModelScope.launch {
+            mapDownloader.clearMapCache()
+            updateMapCacheSize()
+        }
+    }
+
+    fun updateMapCacheSize() {
+        viewModelScope.launch {
+            _mapCacheSizeMB.value = mapDownloader.getCacheSizeMB()
+        }
     }
 }
