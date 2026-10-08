@@ -11,27 +11,35 @@ class Converters {
     // --- Set<String> for Equipment ---
     @TypeConverter
     fun fromStringSet(value: Set<String>?): String {
-        return gson.toJson(value)
+        return gson.toJson(value ?: emptySet<String>())
     }
 
     @TypeConverter
-    fun toStringSet(value: String): Set<String> {
-        if (value.isEmpty()) return emptySet()
+    fun toStringSet(value: String?): Set<String> {
+        if (value.isNullOrEmpty()) return emptySet()
         val type = object : TypeToken<Set<String>>() {}.type
-        return gson.fromJson(value, type) ?: emptySet()
+        return try {
+            gson.fromJson(value, type) ?: emptySet()
+        } catch (e: Exception) {
+            emptySet()
+        }
     }
 
     // --- List<String> for Photo Paths ---
     @TypeConverter
     fun fromStringList(value: List<String>?): String {
-        return gson.toJson(value)
+        return gson.toJson(value ?: emptyList<String>())
     }
 
     @TypeConverter
-    fun toStringList(value: String): List<String> {
-        if (value.isEmpty()) return emptyList()
+    fun toStringList(value: String?): List<String> {
+        if (value.isNullOrEmpty()) return emptyList()
         val type = object : TypeToken<List<String>>() {}.type
-        return gson.fromJson(value, type) ?: emptyList()
+        return try {
+            gson.fromJson(value, type) ?: emptyList()
+        } catch (e: Exception) {
+            listOf(value)
+        }
     }
 
     // --- Pair<Double, Double> for Coordinates ---
@@ -41,22 +49,30 @@ class Converters {
     }
 
     @TypeConverter
-    fun toDoublePair(value: String): Pair<Double, Double> {
-        if (value.isEmpty()) return Pair(0.0, 0.0)
+    fun toDoublePair(value: String?): Pair<Double, Double> {
+        if (value.isNullOrEmpty()) return Pair(0.0, 0.0)
         val type = object : TypeToken<Pair<Double, Double>>() {}.type
-        return gson.fromJson(value, type) ?: Pair(0.0, 0.0)
+        return try {
+            gson.fromJson(value, type) ?: Pair(0.0, 0.0)
+        } catch (e: Exception) {
+            Pair(0.0, 0.0)
+        }
     }
 
     // --- List<Segment> for Project ---
     @TypeConverter
     fun fromSegmentList(value: List<Segment>?): String {
-        return gson.toJson(value)
+        return gson.toJson(value ?: emptyList<Segment>())
     }
 
     @TypeConverter
-    fun toSegmentList(value: String): List<Segment> {
-        if (value.isEmpty()) return emptyList()
+    fun toSegmentList(value: String?): List<Segment> {
+        if (value.isNullOrEmpty()) return emptyList()
         val type = object : TypeToken<List<Segment>>() {}.type
-        return gson.fromJson(value, type) ?: emptyList()
+        return try {
+            gson.fromJson(value, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 }

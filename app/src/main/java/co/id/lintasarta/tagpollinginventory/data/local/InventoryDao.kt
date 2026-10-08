@@ -49,6 +49,9 @@ interface InventoryDao {
     @Query("UPDATE segments SET status = :status WHERE id = :id")
     suspend fun updateSegmentStatus(id: String, status: String)
 
+    @Query("DELETE FROM segments WHERE id IN (:segmentIds)")
+    suspend fun deleteSegments(segmentIds: List<String>)
+
     // --- Poles ---
     @Query("SELECT * FROM poles")
     fun getAllPolesSync(): List<Pole>
@@ -67,6 +70,9 @@ interface InventoryDao {
 
     @Update
     suspend fun updatePole(pole: Pole)
+
+    @Query("DELETE FROM poles WHERE segmentId IN (:segmentIds)")
+    suspend fun deletePolesBySegmentIds(segmentIds: List<String>)
 
     // --- Export Files ---
     @Query("SELECT * FROM export_files ORDER BY createdAt DESC")

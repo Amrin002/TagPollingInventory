@@ -36,10 +36,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
+import androidx.compose.ui.tooling.preview.Preview
 import co.id.lintasarta.tagpollinginventory.camera.CameraPreview
 import co.id.lintasarta.tagpollinginventory.camera.takePhoto
+import co.id.lintasarta.tagpollinginventory.data.model.Pole
+import co.id.lintasarta.tagpollinginventory.location.LocationData
+import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
+import co.id.lintasarta.tagpollinginventory.ui.theme.TagPollingInventoryTheme
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import java.io.File
@@ -51,12 +56,34 @@ fun PhotoCaptureScreen(
     onBackClick: () -> Unit,
     onUsePhotoClick: () -> Unit
 ) {
-    val context = LocalContext.current
     val draftPole by viewModel.currentDraftPole.collectAsState()
-    val capturedPhotos = draftPole?.photoPaths ?: emptyList()
-    val maxPhotos = 3
     val networkStatus by viewModel.networkStatus.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
+
+    PhotoCaptureScreenContent(
+        draftPole = draftPole,
+        networkStatus = networkStatus,
+        currentLocation = currentLocation,
+        onBackClick = onBackClick,
+        onUsePhotoClick = onUsePhotoClick,
+        onRemovePhoto = { photoPath -> viewModel.removePhoto(photoPath) },
+        onAddPhotoAndContinue = { photoPath -> viewModel.addPhotoAndContinue(photoPath) }
+    )
+}
+
+@Composable
+fun PhotoCaptureScreenContent(
+    draftPole: Pole?,
+    networkStatus: NetworkStatus,
+    currentLocation: LocationData,
+    onBackClick: () -> Unit,
+    onUsePhotoClick: () -> Unit,
+    onRemovePhoto: (String) -> Unit,
+    onAddPhotoAndContinue: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val capturedPhotos = draftPole?.photoPaths ?: emptyList()
+    val maxPhotos = 3
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -89,7 +116,7 @@ fun PhotoCaptureScreen(
         topBar = {
             TopBar(
                 title = "Capture Pole Photos",
-                subtitle = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "P-019-019",
+                subtitle = draftPole?.poleCode?.ifEmpty { draftPole.id } ?: "P-019-019",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -193,7 +220,7 @@ fun PhotoCaptureScreen(
                             if (draftPole != null) {
                                 val distance = calculateRealDistanceMeters(
                                     currentLocation.latitude, currentLocation.longitude,
-                                    draftPole!!.latitude, draftPole!!.longitude
+                                    draftPole.latitude, draftPole.longitude
                                 )
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),
@@ -294,7 +321,7 @@ fun PhotoCaptureScreen(
                                     .padding(2.dp)
                                     .size(24.dp)
                                     .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                    .clickable { viewModel.removePhoto(photoPath) },
+                                    .clickable { onRemovePhoto(photoPath) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(16.dp))
@@ -345,7 +372,7 @@ fun PhotoCaptureScreen(
                                     lat = draftPole?.latitude ?: 0.0,
                                     lng = draftPole?.longitude ?: 0.0,
                                     onPhotoSaved = { file ->
-                                        viewModel.addPhotoAndContinue(file.absolutePath)
+                                        onAddPhotoAndContinue(file.absolutePath)
                                         isCapturing = false
                                     },
                                     onError = { e ->
@@ -374,7 +401,8 @@ fun PhotoCaptureScreen(
                     // Finish / Next Button
                     Button(
                         onClick = onUsePhotoClick,
-                        enabled = capturedPhotos.isNotEmpty() && !isCapturing,
+                        enabled = true,
+//                            capturedPhotos.isNotEmpty() && !isCapturing,
                         colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
                     ) {
                         Text(if (capturedPhotos.size >= maxPhotos) "Finish" else "Next", fontWeight = FontWeight.Bold)
@@ -411,4 +439,37 @@ fun PhotoCaptureScreen(
         }
         } // Close the Box
     } // Close the Scaffold
+}
+
+@Preview(showBackground = true)
+@Composable
+fun PhotoCaptureScreenPreview() {
+    TagPollingInventoryTheme {
+        PhotoCaptureScreenContent(
+            draftPole = Pole(
+                id = "P-019-019",
+                segmentId = "SEG-01",
+                sequence = 1,
+                latitude = -3.6954,
+                longitude = 128.1814,
+                poleCode = "P-019-019"
+            ),
+            networkStatus = NetworkStatus(
+                isOnline = true,
+                connectionType = "WiFi"
+            ),
+            currentLocation = LocationData(
+                latitude = -3.6954,
+                longitude = 128.1814,
+                accuracy = 2.8f,
+                altitude = 15.0,
+                isAvailable = true,
+                providerName = "GPS"
+            ),
+            onBackClick = {},
+            onUsePhotoClick = {},
+            onRemovePhoto = {},
+            onAddPhotoAndContinue = {}
+        )
+    }
 }

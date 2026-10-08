@@ -1,6 +1,7 @@
 package co.id.lintasarta.tagpollinginventory.data.repository
 
 import android.content.Context
+import android.util.Log
 import co.id.lintasarta.tagpollinginventory.data.local.AppDatabase
 import co.id.lintasarta.tagpollinginventory.data.model.*
 import kotlinx.coroutines.CoroutineScope
@@ -121,6 +122,28 @@ class InventoryRepository(private val context: Context) {
         }
     }
 
+    fun deleteSegments(segmentIds: List<String>) {
+        Log.d("DeleteTrace", "[Repository] Executing SQLite deletion for: $segmentIds")
+        scope.launch {
+            try {
+                dao.deletePolesBySegmentIds(segmentIds)
+                dao.deleteSegments(segmentIds)
+                
+                Log.d("DeleteTrace", "[Repository] SQLite deletion completed, recalculating stats")
+                
+                // Immediately update local _project flow so UI recomposes
+                val currentProj = _project.value
+                val remainingSegments = currentProj.segments.filter { it.id !in segmentIds }
+                _project.value = currentProj.copy(segments = remainingSegments)
+                
+                recalculateProjectStats()
+                Log.d("DeleteTrace", "[Repository] Deletion fully processed")
+            } catch (e: Exception) {
+                Log.e("DeleteTrace", "[Repository] Failed to delete segments", e)
+            }
+        }
+    }
+
     fun selectSegment(segmentId: String) {
         _selectedSegmentId.value = segmentId
         val poleInSeg = _poles.value.values.firstOrNull { it.segmentId == segmentId }
@@ -238,7 +261,7 @@ class InventoryRepository(private val context: Context) {
             )
             _currentDraftPole.value = updated
             scope.launch {
-                dao.updatePole(updated)
+                dao.insertPole(updated)
             }
         } else {
             val targetId = _targetPoleId.value
@@ -252,7 +275,7 @@ class InventoryRepository(private val context: Context) {
                         capturedTimestamp = now
                     )
                     _currentDraftPole.value = updated
-                    dao.updatePole(updated)
+                    dao.insertPole(updated)
                 }
             }
         }
@@ -263,7 +286,7 @@ class InventoryRepository(private val context: Context) {
         if (pole != null) {
             val updated = pole.copy(latitude = lat, longitude = lng)
             scope.launch {
-                dao.updatePole(updated)
+                dao.insertPole(updated)
             }
             if (_currentDraftPole.value?.id == poleId) {
                 _currentDraftPole.value = updated
@@ -273,7 +296,7 @@ class InventoryRepository(private val context: Context) {
                 val dbPole = dao.getPoleById(poleId)
                 if (dbPole != null) {
                     val updated = dbPole.copy(latitude = lat, longitude = lng)
-                    dao.updatePole(updated)
+                    dao.insertPole(updated)
                     if (_currentDraftPole.value?.id == poleId) {
                         _currentDraftPole.value = updated
                     }
@@ -308,7 +331,7 @@ class InventoryRepository(private val context: Context) {
             )
             _currentDraftPole.value = updated
             scope.launch {
-                dao.updatePole(updated)
+                dao.insertPole(updated)
             }
         } else {
             val targetId = _targetPoleId.value
@@ -327,7 +350,7 @@ class InventoryRepository(private val context: Context) {
                         notes = notes
                     )
                     _currentDraftPole.value = updated
-                    dao.updatePole(updated)
+                    dao.insertPole(updated)
                 }
             }
         }
@@ -342,7 +365,7 @@ class InventoryRepository(private val context: Context) {
                 val updated = current.copy(photoPaths = currentList)
                 _currentDraftPole.value = updated
                 scope.launch {
-                    dao.updatePole(updated)
+                    dao.insertPole(updated)
                 }
             }
         } else {
@@ -355,7 +378,7 @@ class InventoryRepository(private val context: Context) {
                         currentList.add(photoPath)
                         val updated = pole.copy(photoPaths = currentList)
                         _currentDraftPole.value = updated
-                        dao.updatePole(updated)
+                        dao.insertPole(updated)
                     }
                 }
             }
@@ -370,7 +393,7 @@ class InventoryRepository(private val context: Context) {
             val updated = current.copy(photoPaths = currentList)
             _currentDraftPole.value = updated
             scope.launch {
-                dao.updatePole(updated)
+                dao.insertPole(updated)
             }
         } else {
             val targetId = _targetPoleId.value
@@ -381,7 +404,7 @@ class InventoryRepository(private val context: Context) {
                     currentList.remove(photoPath)
                     val updated = pole.copy(photoPaths = currentList)
                     _currentDraftPole.value = updated
-                    dao.updatePole(updated)
+                    dao.insertPole(updated)
                 }
             }
         }
@@ -408,7 +431,7 @@ class InventoryRepository(private val context: Context) {
         _currentDraftPole.value = savedPole
 
         scope.launch {
-            dao.updatePole(savedPole)
+            dao.insertPole(savedPole)
             recalculateProjectStats()
         }
         

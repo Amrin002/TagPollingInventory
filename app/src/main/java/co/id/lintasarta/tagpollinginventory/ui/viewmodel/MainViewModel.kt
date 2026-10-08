@@ -5,6 +5,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import co.id.lintasarta.tagpollinginventory.data.model.*
@@ -298,6 +299,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val segId = selectedSegmentId.value
         if (segId.isNotEmpty()) {
             repository.markSegmentCompleted(segId)
+        }
+    }
+
+    fun deleteSelectedSegments(segmentIds: List<String>) {
+        Log.d("DeleteTrace", "[ViewModel] Calling repository to delete IDs: $segmentIds")
+        repository.deleteSegments(segmentIds)
+        // Also cleanup routes associated with these segments
+        val importedRoutesList = routeRepository.importedRoutes.value
+        segmentIds.forEach { segId ->
+            val route = importedRoutesList.find { it.segmentId == segId }
+            if (route != null) {
+                routeRepository.deleteRoute(route.id)
+            }
         }
     }
 
