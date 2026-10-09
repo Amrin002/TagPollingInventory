@@ -380,6 +380,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun retryGpsCapture() {
         startLocationUpdates()
+        repository.unlockDraftLocation()
+        locationProvider.resetSampling()
         _gpsIsStable.value = true
         _gpsAccuracy.value = (2.1f + Math.random().toFloat() * 1.5f)
     }
@@ -387,13 +389,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun captureCoordinatesAndContinue() {
         val loc = currentLocation.value
         val draft = currentDraftPole.value
-        if (draft != null) {
-            repository.updateDraftLocation(
-                if (loc.latitude != 0.0) loc.latitude else draft.latitude,
-                if (loc.longitude != 0.0) loc.longitude else draft.longitude,
-                _gpsAccuracy.value
-            )
-        }
+        val lat = if (loc.latitude != 0.0) loc.latitude else draft?.latitude ?: 0.0
+        val lng = if (loc.longitude != 0.0) loc.longitude else draft?.longitude ?: 0.0
+        val acc = if (loc.isAvailable) loc.accuracy else _gpsAccuracy.value
+
+        repository.lockDraftLocation(lat, lng, acc)
         navigateTo(ScreenFlow.POLE_INFO)
     }
 

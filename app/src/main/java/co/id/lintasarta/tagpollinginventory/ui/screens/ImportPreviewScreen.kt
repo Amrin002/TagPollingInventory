@@ -19,6 +19,7 @@ import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import java.util.Locale
 
 @Composable
 fun ImportPreviewScreen(
@@ -165,25 +166,41 @@ fun ImportPreviewScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Pole Naming Configuration",
+                            text = "Pole Naming Configuration (Otomatis)",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
+
+                        val (autoCity, autoLoc) = remember(customSegmentName) { deriveCodesFromSegmentName(customSegmentName) }
+                        var userEditedCityCode by remember { mutableStateOf(false) }
+                        var userEditedLocCode by remember { mutableStateOf(false) }
+
+                        val effectiveCityCode = if (userEditedCityCode) cityCode else autoCity
+                        val effectiveLocCode = if (userEditedLocCode) locationCode else autoLoc
+                        val previewSeq = startingSequence.toIntOrNull() ?: 1
+                        val previewPoleCode = "PL-${effectiveCityCode.ifEmpty { "JPR" }}-${effectiveLocCode.ifEmpty { "CTR" }}-${String.format(
+                            Locale.US, "%03d", previewSeq)}"
                         
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
-                                value = cityCode,
-                                onValueChange = { cityCode = it.take(3).uppercase() },
-                                label = { Text("City Code (3 chars)") },
+                                value = if (userEditedCityCode) cityCode else autoCity,
+                                onValueChange = {
+                                    cityCode = it.take(3).uppercase()
+                                    userEditedCityCode = true
+                                },
+                                label = { Text("City Code (Auto/3 chars)") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
                             OutlinedTextField(
-                                value = locationCode,
-                                onValueChange = { locationCode = it.take(3).uppercase() },
-                                label = { Text("Loc Code (3 chars)") },
+                                value = if (userEditedLocCode) locationCode else autoLoc,
+                                onValueChange = {
+                                    locationCode = it.take(3).uppercase()
+                                    userEditedLocCode = true
+                                },
+                                label = { Text("Loc Code (Auto/3 chars)") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -192,10 +209,35 @@ fun ImportPreviewScreen(
                         OutlinedTextField(
                             value = startingSequence,
                             onValueChange = { if (it.all { char -> char.isDigit() }) startingSequence = it },
-                            label = { Text("Starting Sequence (e.g. 0)") },
+                            label = { Text("Starting Sequence (e.g. 1)") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
+
+                        // Live Architecture-Compliant Pole Code Preview
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFE3F2FD),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "Otomatis Format Kode Tiang (Architecture Sec. 9):",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TelecomPrimary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = previewPoleCode,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = TelecomPrimary,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            }
+                        }
                     }
                 }
 

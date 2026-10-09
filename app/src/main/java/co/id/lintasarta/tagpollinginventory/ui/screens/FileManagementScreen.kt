@@ -32,13 +32,15 @@ fun FileManagementScreen(
 ) {
     val context = LocalContext.current
     val exportFiles by viewModel.exportFiles.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
     Scaffold(
         topBar = {
             TopBar(
                 title = "Export File History",
                 subtitle = "${exportFiles.size} Saved Files",
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->

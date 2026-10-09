@@ -70,7 +70,8 @@ data class Pole(
     val notes: String = "",
     val photoPaths: List<String> = emptyList(),
     val status: TagStatus = TagStatus.NOT_TAGGED,
-    val poleCode: String = "" // Business Identifier (e.g. ABNTKBPL-001)
+    val poleCode: String = "", // Business Identifier (e.g. ABNTKBPL-001)
+    val isLocationLocked: Boolean = false
 )
 
 @Entity(tableName = "segments")

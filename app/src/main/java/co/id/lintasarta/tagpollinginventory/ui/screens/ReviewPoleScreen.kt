@@ -26,6 +26,7 @@ import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import java.io.File
+import java.util.Locale
 
 @Composable
 fun ReviewPoleScreen(
@@ -34,13 +35,17 @@ fun ReviewPoleScreen(
     onSaveSuccess: () -> Unit
 ) {
     val draftPole by viewModel.currentDraftPole.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
+
+    val displayPoleCode = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "Target Pole"
 
     Scaffold(
         topBar = {
             TopBar(
                 title = "Review Pole Data",
-                subtitle = draftPole?.id ?: "P-019-019",
-                onBackClick = onBackClick
+                subtitle = displayPoleCode,
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
@@ -53,7 +58,7 @@ fun ReviewPoleScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. LOCATION SECTION
+            // 1. LOCATION SECTION (LOCKED & FIXED)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -69,25 +74,33 @@ fun ReviewPoleScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "LOCATION",
+                            text = "LOCKED LOCATION",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = Color(0xFF2E7D32),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Coordinates captured",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
-                            )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFE8F5E9)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color(0xFF2E7D32),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Coordinates Captured & Locked",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32)
+                                )
+                            }
                         }
                     }
 
@@ -100,21 +113,23 @@ fun ReviewPoleScreen(
                         Column {
                             Text("Latitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(
-                                text = String.format("%.6f", draftPole?.latitude ?: -2.123456),
-                                fontWeight = FontWeight.Bold
+                                text = String.format(Locale.US, "%.6f°", draftPole?.latitude ?: 0.0),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
                             )
                         }
                         Column {
                             Text("Longitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(
-                                text = String.format("%.6f", draftPole?.longitude ?: 140.123456),
-                                fontWeight = FontWeight.Bold
+                                text = String.format(Locale.US, "%.6f°", draftPole?.longitude ?: 0.0),
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
                             )
                         }
                         Column {
                             Text("GPS Accuracy", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(
-                                text = "±${draftPole?.accuracy ?: 2.8}m",
+                                text = String.format(Locale.US, "±%.1fm", draftPole?.accuracy ?: 2.8f),
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32)
                             )
@@ -122,8 +137,9 @@ fun ReviewPoleScreen(
                     }
 
                     Text(
-                        text = "Timestamp: ${draftPole?.capturedTimestamp ?: "01 Oct 2026 — 14:32"}",
+                        text = "Captured Timestamp: ${draftPole?.capturedTimestamp?.ifEmpty { "Just now" } ?: "Just now"}",
                         style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
                         color = Color.DarkGray
                     )
                 }

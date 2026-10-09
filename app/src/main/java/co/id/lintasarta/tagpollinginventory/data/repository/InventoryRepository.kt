@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import co.id.lintasarta.tagpollinginventory.data.local.AppDatabase
 import co.id.lintasarta.tagpollinginventory.data.model.*
+import co.id.lintasarta.tagpollinginventory.ui.screens.deriveCodesFromSegmentName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -173,15 +174,18 @@ class InventoryRepository(private val context: Context) {
 
     fun createNewPoleInSegment(segmentId: String, currentLat: Double, currentLng: Double): Pole {
         val segment = _project.value.segments.find { it.id == segmentId }
-        val cityCode = segment?.cityCode?.takeIf { it.isNotBlank() } ?: "ABN"
-        val locationCode = segment?.locationCode?.takeIf { it.isNotBlank() } ?: "TKB"
+        val (autoCity, autoLoc) = deriveCodesFromSegmentName(segment?.name ?: "")
+        val cityCode = segment?.cityCode?.takeIf { it.isNotBlank() } ?: autoCity
+        val locationCode = segment?.locationCode?.takeIf { it.isNotBlank() } ?: autoLoc
 
         val polesInSeg = _poles.value.values.filter { it.segmentId == segmentId }
         val maxSeqFromPoles = polesInSeg.maxOfOrNull { it.sequence } ?: 0
         val segmentSeq = segment?.currentSequence ?: 0
         val nextSeq = maxOf(maxSeqFromPoles, segmentSeq) + 1
 
-        val poleCodeStr = "${cityCode.uppercase()}${locationCode.uppercase()}PL-${String.format(Locale.US, "%03d", nextSeq)}"
+        // Architecture Section 9 Compliant Pole Code (e.g. PL-JPR-CTR-001)
+        val prefix = if (locationCode.isNotBlank()) "PL-${cityCode.uppercase()}-${locationCode.uppercase()}" else "PL-${cityCode.uppercase()}"
+        val poleCodeStr = "$prefix-${String.format(Locale.US, "%03d", nextSeq)}"
         val poleId = UUID.randomUUID().toString()
 
         if (segment != null) {
@@ -251,6 +255,8 @@ class InventoryRepository(private val context: Context) {
 
     fun updateDraftLocation(lat: Double, lng: Double, accuracy: Float) {
         val current = _currentDraftPole.value
+        if (current?.isLocationLocked == true) return
+
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
         if (current != null) {
             val updated = current.copy(
@@ -267,7 +273,7 @@ class InventoryRepository(private val context: Context) {
             val targetId = _targetPoleId.value
             scope.launch {
                 val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
-                if (pole != null) {
+                if (pole != null && !pole.isLocationLocked) {
                     val updated = pole.copy(
                         latitude = lat,
                         longitude = lng,
@@ -278,6 +284,33 @@ class InventoryRepository(private val context: Context) {
                     dao.insertPole(updated)
                 }
             }
+        }
+    }
+
+    fun lockDraftLocation(lat: Double, lng: Double, accuracy: Float) {
+        val current = _currentDraftPole.value ?: return
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+        val finalLat = if (lat != 0.0) lat else current.latitude
+        val finalLng = if (lng != 0.0) lng else current.longitude
+        val locked = current.copy(
+            latitude = finalLat,
+            longitude = finalLng,
+            accuracy = accuracy,
+            capturedTimestamp = now,
+            isLocationLocked = true
+        )
+        _currentDraftPole.value = locked
+        scope.launch {
+            dao.insertPole(locked)
+        }
+    }
+
+    fun unlockDraftLocation() {
+        val current = _currentDraftPole.value ?: return
+        val unlocked = current.copy(isLocationLocked = false)
+        _currentDraftPole.value = unlocked
+        scope.launch {
+            dao.insertPole(unlocked)
         }
     }
     
@@ -356,81 +389,82 @@ class InventoryRepository(private val context: Context) {
         }
     }
 
+    fun normalizePhotoSlots(paths: List<String>): MutableList<String> {
+        val result = MutableList(10) { "" }
+        for (i in paths.indices) {
+            if (i < 10) {
+                result[i] = paths[i]
+            }
+        }
+        return result
+    }
+
+    fun setDraftPhotoForSlot(slotIndex: Int, photoPath: String) {
+        if (slotIndex !in 0..9) return
+        val current = _currentDraftPole.value ?: return
+        val currentSlots = normalizePhotoSlots(current.photoPaths)
+        currentSlots[slotIndex] = photoPath
+        val updated = current.copy(photoPaths = currentSlots)
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.insertPole(updated)
+        }
+    }
+
+    fun removeDraftPhotoFromSlot(slotIndex: Int) {
+        if (slotIndex !in 0..9) return
+        val current = _currentDraftPole.value ?: return
+        val currentSlots = normalizePhotoSlots(current.photoPaths)
+        val oldPath = currentSlots[slotIndex]
+        if (oldPath.isNotEmpty()) {
+            val file = File(oldPath)
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+        currentSlots[slotIndex] = ""
+        val updated = current.copy(photoPaths = currentSlots)
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.insertPole(updated)
+        }
+    }
+
     fun addDraftPhoto(photoPath: String) {
-        val current = _currentDraftPole.value
-        if (current != null) {
-            val currentList = current.photoPaths.toMutableList()
-            if (currentList.size < 4) { // Increased capacity to 4
-                currentList.add(photoPath)
-                val updated = current.copy(photoPaths = currentList)
-                _currentDraftPole.value = updated
-                scope.launch {
-                    dao.insertPole(updated)
-                }
-            }
+        val current = _currentDraftPole.value ?: return
+        val currentSlots = normalizePhotoSlots(current.photoPaths)
+        // Find first empty slot
+        val firstEmptyIndex = currentSlots.indexOfFirst { it.isEmpty() }
+        if (firstEmptyIndex != -1) {
+            setDraftPhotoForSlot(firstEmptyIndex, photoPath)
         } else {
-            val targetId = _targetPoleId.value
-            scope.launch {
-                val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
-                if (pole != null) {
-                    val currentList = pole.photoPaths.toMutableList()
-                    if (currentList.size < 4) { // Increased capacity to 4
-                        currentList.add(photoPath)
-                        val updated = pole.copy(photoPaths = currentList)
-                        _currentDraftPole.value = updated
-                        dao.insertPole(updated)
-                    }
-                }
-            }
+            setDraftPhotoForSlot(3, photoPath) // Replace optional if full
         }
     }
 
     fun addDraftPhotoWithNotes(photoPath: String, additionalNote: String) {
-        val current = _currentDraftPole.value
-        if (current != null) {
-            val currentList = current.photoPaths.toMutableList()
-            if (currentList.size < 4) { // Support for 4th photo
-                currentList.add(photoPath)
-                var updatedNotes = current.notes
-                if (additionalNote.isNotBlank()) {
-                    updatedNotes = if (updatedNotes.isEmpty()) {
-                        "[Tambahan]: $additionalNote"
-                    } else {
-                        "$updatedNotes\n[Tambahan]: $additionalNote"
-                    }
-                }
-                
-                val updated = current.copy(photoPaths = currentList, notes = updatedNotes)
-                _currentDraftPole.value = updated
-                scope.launch {
-                    dao.insertPole(updated)
-                }
+        addDraftPhoto(photoPath)
+        val current = _currentDraftPole.value ?: return
+        if (additionalNote.isNotBlank()) {
+            val updatedNotes = if (current.notes.isEmpty()) {
+                "[Tambahan]: $additionalNote"
+            } else {
+                "${current.notes}\n[Tambahan]: $additionalNote"
+            }
+            val updated = current.copy(notes = updatedNotes)
+            _currentDraftPole.value = updated
+            scope.launch {
+                dao.insertPole(updated)
             }
         }
     }
     
     fun removeDraftPhoto(photoPath: String) {
-        val current = _currentDraftPole.value
-        if (current != null) {
-            val currentList = current.photoPaths.toMutableList()
-            currentList.remove(photoPath)
-            val updated = current.copy(photoPaths = currentList)
-            _currentDraftPole.value = updated
-            scope.launch {
-                dao.insertPole(updated)
-            }
-        } else {
-            val targetId = _targetPoleId.value
-            scope.launch {
-                val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
-                if (pole != null) {
-                    val currentList = pole.photoPaths.toMutableList()
-                    currentList.remove(photoPath)
-                    val updated = pole.copy(photoPaths = currentList)
-                    _currentDraftPole.value = updated
-                    dao.insertPole(updated)
-                }
-            }
+        val current = _currentDraftPole.value ?: return
+        val currentSlots = normalizePhotoSlots(current.photoPaths)
+        val index = currentSlots.indexOf(photoPath)
+        if (index != -1) {
+            removeDraftPhotoFromSlot(index)
         }
     }
 

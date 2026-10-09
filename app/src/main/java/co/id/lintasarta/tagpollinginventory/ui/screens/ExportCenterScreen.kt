@@ -1,5 +1,6 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +25,7 @@ import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExportCenterScreen(
     viewModel: MainViewModel,
@@ -49,6 +51,7 @@ fun ExportCenterScreen(
     }
 
     var showOptionsDialog by remember { mutableStateOf(false) }
+    var isSegmentDropdownExpanded by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -58,7 +61,7 @@ fun ExportCenterScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Compact Header
+        // Header with History Button
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = TelecomPrimary,
@@ -69,7 +72,7 @@ fun ExportCenterScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = "Export Inventory",
                         style = MaterialTheme.typography.titleMedium,
@@ -77,23 +80,30 @@ fun ExportCenterScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "${project.name} • ${activeSegment.name}",
+                        text = "${project.name} • ${project.segments.size} Segments",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.85f)
                     )
                 }
 
-                IconButton(onClick = onViewHistoryClick) {
+                OutlinedButton(
+                    onClick = onViewHistoryClick,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.6f)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Folder,
+                        imageVector = Icons.Default.FolderOpen,
                         contentDescription = "Export History",
-                        tint = Color.White
+                        modifier = Modifier.size(16.dp)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("History", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
 
-        // Summary Header Card
+        // Summary & Segment Dropdown Scope Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -103,44 +113,60 @@ fun ExportCenterScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "CURRENT SCOPE",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Gray
-                        )
-                        Text(
-                            text = activeSegment.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TelecomPrimary
-                        )
-                        Text(
-                            text = activeSegment.route,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
-                    }
+                Text(
+                    text = "SELECT EXPORT SCOPE / SEGMENT",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = TelecomPrimary
+                )
 
-                    OutlinedButton(
-                        onClick = onViewHistoryClick,
+                // Interactive Segment Selector Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = isSegmentDropdownExpanded,
+                    onExpandedChange = { isSegmentDropdownExpanded = !isSegmentDropdownExpanded }
+                ) {
+                    OutlinedTextField(
+                        value = activeSegment.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Active Segment Scope") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isSegmentDropdownExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                         shape = RoundedCornerShape(8.dp)
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = isSegmentDropdownExpanded,
+                        onDismissRequest = { isSegmentDropdownExpanded = false }
                     ) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Export History", fontSize = 12.sp)
+                        project.segments.forEach { segment ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(segment.name, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = "${segment.totalPoles} poles • ${segment.route.ifEmpty { "No Route" }}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.selectSegment(segment.id, navigateToDetail = false)
+                                    isSegmentDropdownExpanded = false
+                                },
+                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                            )
+                        }
                     }
                 }
 
                 HorizontalDivider()
 
-                // Record Summary Metrics
+                // Record Summary Metrics for Selected Segment
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween

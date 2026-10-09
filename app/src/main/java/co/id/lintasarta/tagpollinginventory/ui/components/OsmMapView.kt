@@ -32,6 +32,7 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
+import java.io.File
 
 @Composable
 fun OsmMapView(
@@ -45,16 +46,24 @@ fun OsmMapView(
     val context = LocalContext.current
 
     LaunchedEffect(Unit) {
-        Configuration.getInstance().load(context, PreferenceManager.getDefaultSharedPreferences(context))
+        val osmdroidDir = File(context.filesDir, "osmdroid").apply { if (!exists()) mkdirs() }
+        val tilesDir = File(osmdroidDir, "tiles").apply { if (!exists()) mkdirs() }
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        Configuration.getInstance().load(context, prefs)
         Configuration.getInstance().userAgentValue = "TagPollingInventory/1.0 (Android Field Application)"
+        Configuration.getInstance().osmdroidBasePath = osmdroidDir
+        Configuration.getInstance().osmdroidTileCache = tilesDir
     }
 
     val mapView = remember {
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
+            setUseDataConnection(true) // Will fallback to local SQLite cache / MBTiles if offline
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             controller.setZoom(16.5)
+            isTilesScaledToDpi = true
         }
     }
     

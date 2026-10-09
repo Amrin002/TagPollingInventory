@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.model.DeviationStatus
@@ -24,6 +25,7 @@ import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import java.util.Locale
 
 @Composable
 fun FieldMapScreen(
@@ -236,20 +238,28 @@ fun FieldMapScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val displayTargetCode = remember(targetPole) {
+                        if (targetPole == null) "No Pole Selected"
+                        else targetPole.poleCode.ifEmpty { "Pole #${targetPole.sequence}" }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.LocationOn,
                                 contentDescription = null,
                                 tint = TelecomPrimary,
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(26.dp)
                             )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
                                     text = "TARGET POLE",
                                     style = MaterialTheme.typography.labelSmall,
@@ -257,31 +267,35 @@ fun FieldMapScreen(
                                     color = Color.Gray
                                 )
                                 Text(
-                                    text = targetPole?.id ?: "Pole P-019-019",
+                                    text = displayTargetCode,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = TelecomPrimary
+                                    color = TelecomPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         Surface(
                             shape = RoundedCornerShape(20.dp),
                             color = Color(0xFFFFF3E0)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PinDrop,
                                     contentDescription = null,
                                     tint = Color(0xFFEF6C00),
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(14.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Distance: ${String.format("%.0f", realDistanceMeters)} m",
+                                    text = "Distance: ${String.format(Locale.US, "%.0f", realDistanceMeters)} m",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFEF6C00)

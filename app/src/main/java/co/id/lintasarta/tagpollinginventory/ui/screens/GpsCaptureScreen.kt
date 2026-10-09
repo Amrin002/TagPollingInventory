@@ -259,7 +259,7 @@ fun GpsCaptureScreen(
                 }
             }
 
-            // Real-time Coordinate Display Card
+            // Real-time Coordinate & Telemetry Display Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -269,26 +269,66 @@ fun GpsCaptureScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("LIVE GPS COORDINATES", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                    Text("LIVE GPS COORDINATES & TELEMETRY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
+
+                    // Sampling Progress Bar
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Sampling Progress", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("${currentLocation.sampleCount} / ${currentLocation.targetSamples} Samples", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                        }
+                        LinearProgressIndicator(
+                            progress = { currentLocation.sampleCount.toFloat() / currentLocation.targetSamples.toFloat() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp),
+                            color = qualityColor,
+                            trackColor = qualityBg
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = Color(0xFFEEEEEE))
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Latitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Latitude (Centroid)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(String.format(Locale.US, "%.6f°", currentLocation.latitude), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Longitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Longitude (Centroid)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(String.format(Locale.US, "%.6f°", currentLocation.longitude), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Altitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text(String.format(Locale.US, "%.1f m", currentLocation.altitude), fontWeight = FontWeight.Bold)
+                        Text("Accuracy (p68)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(String.format(Locale.US, "±%.1f meters", gpsAccuracy), fontWeight = FontWeight.Bold, color = qualityColor)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("GPS Accuracy", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text(String.format(Locale.US, "±%.1f meters", gpsAccuracy), fontWeight = FontWeight.Bold, color = qualityColor)
+                        Text("Sample Dispersion", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(String.format(Locale.US, "±%.2f meters", currentLocation.sampleDispersionMeters), fontWeight = FontWeight.Bold, color = Color.DarkGray)
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = Color(0xFFEEEEEE))
+
+                    // GnssStatus Telemetry Section
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Satellites (Used / Visible)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("${currentLocation.satellitesUsed} / ${currentLocation.satellitesVisible} Satellites", fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                    }
+
+                    if (currentLocation.constellations.isNotEmpty()) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Constellations", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text(currentLocation.constellations.joinToString(", "), fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
+                        }
+                    }
+
+                    if (currentLocation.avgCn0DbHz > 0) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Signal Strength (C/N0)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text(String.format(Locale.US, "%.1f dBHz", currentLocation.avgCn0DbHz), fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
+                        }
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

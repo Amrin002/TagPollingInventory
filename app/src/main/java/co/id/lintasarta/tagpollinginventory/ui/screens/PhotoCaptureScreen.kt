@@ -1,22 +1,26 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -32,11 +36,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
-import androidx.compose.ui.tooling.preview.Preview
 import co.id.lintasarta.tagpollinginventory.camera.CameraPreview
 import co.id.lintasarta.tagpollinginventory.camera.takePhoto
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
@@ -44,13 +48,12 @@ import co.id.lintasarta.tagpollinginventory.location.LocationData
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
-import co.id.lintasarta.tagpollinginventory.ui.theme.TagPollingInventoryTheme
+import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import java.io.File
 import java.util.Locale
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextFieldDefaults
+import kotlin.math.abs
 
 @Composable
 fun PhotoCaptureScreen(
@@ -61,38 +64,124 @@ fun PhotoCaptureScreen(
     val draftPole by viewModel.currentDraftPole.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
-    val pendingPhotoPath by viewModel.pendingPhotoPath.collectAsState()
 
     PhotoCaptureScreenContent(
+        viewModel = viewModel,
         draftPole = draftPole,
         networkStatus = networkStatus,
         currentLocation = currentLocation,
-        pendingPhotoPath = pendingPhotoPath,
         onBackClick = onBackClick,
-        onRemovePhoto = { path -> viewModel.removePhoto(path) },
-        onSaveAndReview = onSaveAndReview,
-        onStagePhoto = { path -> viewModel.stagePhotoForPreview(path) },
-        onAcceptPhoto = { note -> viewModel.acceptPendingPhoto(note) },
-        onDiscardPhoto = { viewModel.discardPendingPhoto() }
+        onSaveAndReview = onSaveAndReview
     )
 }
 
+data class PhotoCategorySpec(
+    val index: Int,
+    val title: String,
+    val subtitle: String,
+    val guideText: String,
+    val isRequired: Boolean
+)
+
+val photoCategorySpecs = listOf(
+    PhotoCategorySpec(
+        index = 0,
+        title = "1. Pondasi & Lingkungan Tiang",
+        subtitle = "Pole Foundation & Surroundings",
+        guideText = "Ambil foto sudut lebar memperlihatkan pondasi tiang & lingkungan sekitarnya.",
+        isRequired = true
+    ),
+    PhotoCategorySpec(
+        index = 1,
+        title = "2. Label Tag & Nomor Seri",
+        subtitle = "Tag Label & Serial Number",
+        guideText = "Ambil foto jarak dekat (close-up) membaca teks label/plat merk tiang.",
+        isRequired = true
+    ),
+    PhotoCategorySpec(
+        index = 2,
+        title = "3. Perangkat Atas / Closure / ODP",
+        subtitle = "Top Closure / ODP / Cables",
+        guideText = "Ambil foto bagian atas tiang memperlihatkan ODP/Closure & kabel FO.",
+        isRequired = true
+    ),
+    PhotoCategorySpec(
+        index = 3,
+        title = "4. Dokumentasi Tambahan 1 (Opsional)",
+        subtitle = "Optional Documentation 1",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    ),
+    PhotoCategorySpec(
+        index = 4,
+        title = "5. Dokumentasi Tambahan 2 (Opsional)",
+        subtitle = "Optional Documentation 2",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    ),
+    PhotoCategorySpec(
+        index = 5,
+        title = "6. Dokumentasi Tambahan 3 (Opsional)",
+        subtitle = "Optional Documentation 3",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    ),
+    PhotoCategorySpec(
+        index = 6,
+        title = "7. Dokumentasi Tambahan 4 (Opsional)",
+        subtitle = "Optional Documentation 4",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    ),
+    PhotoCategorySpec(
+        index = 7,
+        title = "8. Dokumentasi Tambahan 5 (Opsional)",
+        subtitle = "Optional Documentation 5",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    ),
+    PhotoCategorySpec(
+        index = 8,
+        title = "9. Dokumentasi Tambahan 6 (Opsional)",
+        subtitle = "Optional Documentation 6",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    ),
+    PhotoCategorySpec(
+        index = 9,
+        title = "10. Dokumentasi Tambahan 7 (Opsional)",
+        subtitle = "Optional Documentation 7",
+        guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
+        isRequired = false
+    )
+)
+
 @Composable
 fun PhotoCaptureScreenContent(
+    viewModel: MainViewModel,
     draftPole: Pole?,
     networkStatus: NetworkStatus,
     currentLocation: LocationData,
-    pendingPhotoPath: String?,
     onBackClick: () -> Unit,
-    onRemovePhoto: (String) -> Unit,
-    onSaveAndReview: () -> Unit,
-    onStagePhoto: (String) -> Unit,
-    onAcceptPhoto: (String) -> Unit,
-    onDiscardPhoto: () -> Unit
+    onSaveAndReview: () -> Unit
 ) {
     val context = LocalContext.current
-    val capturedPhotos = draftPole?.photoPaths ?: emptyList()
-    val maxPhotos = 4 // Up to 4 photos (3 required + 1 optional)
+    val rawPhotoPaths = draftPole?.photoPaths ?: emptyList()
+
+    // Fixed 10 slots
+    val slotPaths = remember(rawPhotoPaths) {
+        val result = MutableList(10) { "" }
+        for (i in rawPhotoPaths.indices) {
+            if (i < 10) result[i] = rawPhotoPaths[i]
+        }
+        result
+    }
+
+    val requiredFilledCount = listOf(slotPaths[0], slotPaths[1], slotPaths[2]).count { it.isNotEmpty() }
+    val isRequiredComplete = requiredFilledCount == 3
+
+    var activeCameraSlotIndex by remember { mutableStateOf<Int?>(null) }
+    var inspectingPhotoPath by remember { mutableStateOf<String?>(null) }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -120,147 +209,73 @@ fun PhotoCaptureScreenContent(
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
     var imageCaptureInstance by remember { mutableStateOf<ImageCapture?>(null) }
     val cameraExecutor = remember { ContextCompat.getMainExecutor(context) }
-    
-    var additionalNoteText by remember { mutableStateOf("") }
-    var isTakingOptionalPhoto by remember { mutableStateOf(false) }
+
+    // Device Tilt Level Sensor (Waterpass)
+    var rollAngle by remember { mutableStateOf(0f) }
+    var pitchAngle by remember { mutableStateOf(0f) }
+    val sensorManager = remember { context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager }
+
+    DisposableEffect(Unit) {
+        val accelSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        val magnetSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+
+        val gravity = FloatArray(3)
+        val geomagnetic = FloatArray(3)
+        val rotationMatrix = FloatArray(9)
+        val orientationAngles = FloatArray(3)
+
+        val sensorListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent?) {
+                if (event == null) return
+                if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+                    System.arraycopy(event.values, 0, gravity, 0, 3)
+                } else if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+                    System.arraycopy(event.values, 0, geomagnetic, 0, 3)
+                }
+
+                if (SensorManager.getRotationMatrix(rotationMatrix, null, gravity, geomagnetic)) {
+                    SensorManager.getOrientation(rotationMatrix, orientationAngles)
+                    pitchAngle = Math.toDegrees(orientationAngles[1].toDouble()).toFloat()
+                    rollAngle = Math.toDegrees(orientationAngles[2].toDouble()).toFloat()
+                }
+            }
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+
+        sensorManager?.registerListener(sensorListener, accelSensor, SensorManager.SENSOR_DELAY_UI)
+        sensorManager?.registerListener(sensorListener, magnetSensor, SensorManager.SENSOR_DELAY_UI)
+
+        onDispose {
+            sensorManager?.unregisterListener(sensorListener)
+        }
+    }
+
+    val absRoll = abs(rollAngle)
+    val isDeviceLevel = absRoll <= 5.0f
+    val displayPoleCode = draftPole?.poleCode?.ifEmpty { draftPole.id } ?: "Target Pole"
 
     Box(modifier = Modifier.fillMaxSize()) {
-        if (pendingPhotoPath != null) {
-            // STATE: PHOTO PREVIEW
-            Column(
-                modifier = Modifier.fillMaxSize().background(Color.Black)
-            ) {
-                TopBar(
-                    title = "Preview Photo",
-                    subtitle = if (capturedPhotos.size >= 3) "Optional Documentation" else "Photo ${capturedPhotos.size + 1} of 3",
-                    onBackClick = onDiscardPhoto,
-                    networkStatus = networkStatus
-                )
-
+        if (activeCameraSlotIndex != null) {
+            // MODE 2: PRESERVED LIVE CAMERAX VIEWFINDER & OVERLAY
+            val currentSpec = photoCategorySpecs.find { it.index == activeCameraSlotIndex }
+            
+            Scaffold(
+                topBar = {
+                    TopBar(
+                        title = currentSpec?.title ?: "Take Photo",
+                        subtitle = displayPoleCode,
+                        onBackClick = { activeCameraSlotIndex = null },
+                        networkStatus = networkStatus
+                    )
+                }
+            ) { innerPadding ->
                 Box(
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(Color.Black)
                 ) {
-                    AsyncImage(
-                        model = pendingPhotoPath,
-                        contentDescription = "Preview",
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                if (capturedPhotos.size >= 3) {
-                    // Optional Note Input for 4th photo
-                    Surface(color = Color.Black.copy(alpha = 0.8f)) {
-                        OutlinedTextField(
-                            value = additionalNoteText,
-                            onValueChange = { additionalNoteText = it },
-                            placeholder = { Text("Tambahkan catatan dokumentasi (Opsional)...", color = Color.Gray) },
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.DarkGray,
-                                unfocusedContainerColor = Color.DarkGray,
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                cursorColor = TelecomPrimary,
-                                focusedIndicatorColor = TelecomPrimary,
-                                unfocusedIndicatorColor = Color.Transparent
-                            )
-                        )
-                    }
-                }
-
-                Surface(
-                    color = Color(0xFF1E1E1E),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceAround
-                    ) {
-                        Button(
-                            onClick = onDiscardPhoto,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Retake")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Retake")
-                        }
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Button(
-                            onClick = {
-                                onAcceptPhoto(additionalNoteText)
-                                additionalNoteText = ""
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = "Accept")
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("OK")
-                        }
-                    }
-                }
-            }
-        } else {
-            // STATE: CAMERA PREVIEW
-    Scaffold(
-        topBar = {
-            TopBar(
-                title = "Capture Pole Photos",
-                subtitle = draftPole?.poleCode?.ifEmpty { draftPole.id } ?: "P-019-019",
-                onBackClick = onBackClick,
-                networkStatus = networkStatus
-            )
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .background(Color.Black)
-            ) {
-            // Instruction Header
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF1E1E1E)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    val label = when(capturedPhotos.size) {
-                        0 -> "Photo 1: Pole Foundation & Surroundings"
-                        1 -> "Photo 2: Tag Label & Serial Number"
-                        2 -> "Photo 3: Top Closure / ODP / Cables"
-                        else -> "Maximum photos reached ($maxPhotos/3)"
-                    }
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (capturedPhotos.size < maxPhotos) Color.White else Color(0xFF4CAF50)
-                    )
-                    Text(
-                        text = "${capturedPhotos.size} of $maxPhotos photos taken",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.LightGray
-                    )
-                }
-            }
-
-            // Viewfinder / Photo Preview Area
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color(0xFF121212)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (hasCameraPermission) {
-                    // Real CameraX Live Preview Feed!
-                    if (capturedPhotos.size < 3 || (capturedPhotos.size == 3 && isTakingOptionalPhoto)) {
+                    if (hasCameraPermission) {
                         CameraPreview(
                             cameraSelector = cameraSelector,
                             flashMode = flashMode,
@@ -269,27 +284,85 @@ fun PhotoCaptureScreenContent(
                             }
                         )
 
-                        // Camera Framing Overlay
+                        // Camera Framing Overlay (Siluet Tiang & Waterpass)
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             val w = size.width
                             val h = size.height
-                            val boxW = w * 0.7f
-                            val boxH = h * 0.8f
+
+                            val boxW = w * 0.35f
+                            val boxH = h * 0.82f
+                            val left = (w - boxW) / 2
+                            val top = (h - boxH) / 2
+
+                            val overlayColor = if (isDeviceLevel) Color(0xFF4CAF50) else Color(0xFFFF9800)
+
+                            // Outer Corridor Box
                             drawRect(
-                                color = TelecomPrimary.copy(alpha = 0.5f),
-                                topLeft = Offset((w - boxW) / 2, (h - boxH) / 2),
+                                color = overlayColor.copy(alpha = 0.6f),
+                                topLeft = Offset(left, top),
                                 size = Size(boxW, boxH),
-                                style = Stroke(width = 4f)
+                                style = Stroke(width = 3f)
+                            )
+
+                            // Vertical Centre Line
+                            drawLine(
+                                color = overlayColor.copy(alpha = 0.8f),
+                                start = Offset(w / 2, top),
+                                end = Offset(w / 2, top + boxH),
+                                strokeWidth = 2f
+                            )
+
+                            // Top Safe Area Marker
+                            val topAreaY = top + boxH * 0.15f
+                            drawLine(
+                                color = Color.White.copy(alpha = 0.7f),
+                                start = Offset(left, topAreaY),
+                                end = Offset(left + boxW, topAreaY),
+                                strokeWidth = 2f
+                            )
+
+                            // Base Safe Area Marker
+                            val baseAreaY = top + boxH * 0.85f
+                            drawLine(
+                                color = Color.White.copy(alpha = 0.7f),
+                                start = Offset(left, baseAreaY),
+                                end = Offset(left + boxW, baseAreaY),
+                                strokeWidth = 2f
                             )
                         }
 
-                        // GPS & Distance Overlay Badges
+                        // Badges Overlay (Top-Left)
                         Column(
                             modifier = Modifier
                                 .align(Alignment.TopStart)
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            // Waterpass Device Tilt Level Badge
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isDeviceLevel) Color(0xFF2E7D32).copy(alpha = 0.85f) else Color(0xFFE65100).copy(alpha = 0.85f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isDeviceLevel) Icons.Default.CheckCircle else Icons.Default.ScreenRotation,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isDeviceLevel) "Ponsel Tegak (±${String.format(Locale.US, "%.1f", absRoll)}°)" else "Ponsel Miring (±${String.format(Locale.US, "%.1f", absRoll)}°)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
+
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = Color.Black.copy(alpha = 0.6f)
@@ -334,250 +407,335 @@ fun PhotoCaptureScreenContent(
                                 }
                             }
                         }
-                    } else {
-                        // 3 Photos Reached - Branching UI
-                        Box(
-                            modifier = Modifier.fillMaxSize().background(Color(0xFF263238)),
-                            contentAlignment = Alignment.Center
+
+                        // Bottom Controls
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter),
+                            color = Color(0xFF1E1E1E)
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(80.dp)
-                                )
-                                Text("3 Required Photos Captured", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                
-                                Spacer(modifier = Modifier.height(24.dp))
-                                
-                                Button(
-                                    onClick = { isTakingOptionalPhoto = true },
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
-                                    modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        flashMode = if (flashMode == ImageCapture.FLASH_MODE_OFF) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
+                                    }
                                 ) {
-                                    Icon(Icons.Default.AddAPhoto, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Tambahkan Foto (Opsional)", fontWeight = FontWeight.Bold)
+                                    Icon(
+                                        imageVector = if (flashMode == ImageCapture.FLASH_MODE_ON) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                        contentDescription = "Flash",
+                                        tint = Color.White
+                                    )
                                 }
-                                
-                                Button(
-                                    onClick = onSaveAndReview,
-                                    colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary, contentColor = Color.White),
-                                    modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+
+                                // Shutter Button
+                                IconButton(
+                                    onClick = {
+                                        if (isCapturing) return@IconButton
+                                        isCapturing = true
+                                        val poleId = draftPole?.id ?: "P-019-019"
+                                        val slotIndex = activeCameraSlotIndex ?: 0
+
+                                        takePhoto(
+                                            context = context,
+                                            imageCapture = imageCaptureInstance,
+                                            executor = cameraExecutor,
+                                            poleId = poleId,
+                                            lat = draftPole?.latitude ?: 0.0,
+                                            lng = draftPole?.longitude ?: 0.0,
+                                            onPhotoSaved = { file ->
+                                                viewModel.repository.setDraftPhotoForSlot(slotIndex, file.absolutePath)
+                                                isCapturing = false
+                                                activeCameraSlotIndex = null
+                                            },
+                                            onError = { e ->
+                                                isCapturing = false
+                                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .size(72.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White)
+                                        .border(4.dp, TelecomPrimary, CircleShape)
                                 ) {
-                                    Text("Selesai & Lanjut ke Review", fontWeight = FontWeight.Bold)
+                                    Box(
+                                        modifier = Modifier
+                                            .size(54.dp)
+                                            .clip(CircleShape)
+                                            .background(TelecomPrimary)
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.size(48.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // MODE 1: STRUCTURED PHOTO DOCUMENTATION CHECKLIST SCREEN
+            Scaffold(
+                topBar = {
+                    TopBar(
+                        title = "Capture Pole Photos",
+                        subtitle = displayPoleCode,
+                        onBackClick = onBackClick,
+                        networkStatus = networkStatus
+                    )
+                }
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(NeutralBackground)
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Header Progress Card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = "DOKUMENTASI FOTO TIANG",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    text = if (isRequiredComplete) "3 Foto Wajib Lengkap" else "Lengkapi Foto Wajib",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = if (isRequiredComplete) Color(0xFF2E7D32) else TelecomPrimary
+                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isRequiredComplete) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
+                            ) {
+                                Text(
+                                    text = "$requiredFilledCount / 3 Wajib Terisi",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isRequiredComplete) Color(0xFF2E7D32) else Color(0xFFEF6C00)
+                                )
+                            }
+                        }
+                    }
+
+                    // 4 Category Cards
+                    photoCategorySpecs.forEach { spec ->
+                        val currentPath = slotPaths.getOrElse(spec.index) { "" }
+                        val isFilled = currentPath.isNotEmpty() && File(currentPath).exists()
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = spec.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TelecomPrimary
+                                        )
+                                        Text(
+                                            text = spec.subtitle,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isFilled) Color(0xFFE8F5E9) else if (spec.isRequired) Color(0xFFFFF3E0) else Color(0xFFF5F5F5)
+                                    ) {
+                                        Text(
+                                            text = if (isFilled) "✓ FOTO TERSIMPAN" else if (spec.isRequired) "BELUM ADA FOTO" else "OPSIONAL",
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isFilled) Color(0xFF2E7D32) else if (spec.isRequired) Color(0xFFEF6C00) else Color.Gray
+                                        )
+                                    }
+                                }
+
+                                HorizontalDivider()
+
+                                if (isFilled) {
+                                    // Large Image Preview Card (like Image 2 "LKI VSAT")
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(200.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+                                            .clickable { inspectingPhotoPath = currentPath },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        AsyncImage(
+                                            model = File(currentPath),
+                                            contentDescription = spec.title,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+
+                                        Surface(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomEnd)
+                                                .padding(8.dp),
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color.Black.copy(alpha = 0.7f)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.ZoomIn,
+                                                    contentDescription = "Zoom",
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Klik Perbesar", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                                            }
+                                        }
+                                    }
+
+                                    // Action Buttons Row (Retake & Delete)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { activeCameraSlotIndex = spec.index },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TelecomPrimary)
+                                        ) {
+                                            Icon(Icons.Default.Refresh, contentDescription = "Retake", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Ulangi (Retake)")
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { viewModel.repository.removeDraftPhotoFromSlot(spec.index) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828))
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Hapus Foto")
+                                        }
+                                    }
+                                } else {
+                                    // Unfilled Slot Guidance & Take Photo Button
+                                    Text(
+                                        text = spec.guideText,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.DarkGray
+                                    )
+
+                                    Button(
+                                        onClick = { activeCameraSlotIndex = spec.index },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(48.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Ambil Foto ${spec.subtitle}", fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
                     }
-                } else {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Continue Button
+                    Button(
+                        onClick = onSaveAndReview,
+                        enabled = isRequiredComplete,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CameraAlt,
-                            contentDescription = null,
-                            tint = Color.Gray,
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Camera Permission Required",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color.White,
+                            text = if (isRequiredComplete) "Selesai & Lanjut ke Review" else "Lengkapi 3 Foto Wajib",
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                            colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
-                        ) {
-                            Text("Grant Permission")
-                        }
-                    }
-                }
-
-                // Remove the loading overlay from the main Viewfinder box 
-                // because it forces full recomposition of the CameraPreview, which can interrupt capture.
-            }
-
-            // Photo Gallery Strip (Bottom)
-            if (capturedPhotos.isNotEmpty()) {
-                LazyRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF2C2C2C))
-                        .padding(vertical = 12.dp, horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(capturedPhotos) { photoPath ->
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(2.dp, Color.White, RoundedCornerShape(8.dp))
-                        ) {
-                            AsyncImage(
-                                model = File(photoPath),
-                                contentDescription = "Thumb",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-                            // Delete button
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(2.dp)
-                                    .size(24.dp)
-                                    .background(Color.Black.copy(alpha = 0.6f), CircleShape)
-                                    .clickable { onRemovePhoto(photoPath) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.White, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Controls
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF1E1E1E)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Flash Toggle
-                    IconButton(
-                        onClick = {
-                            flashMode = if (flashMode == ImageCapture.FLASH_MODE_OFF) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
-                        },
-                        enabled = capturedPhotos.size < maxPhotos
-                    ) {
-                        Icon(
-                            imageVector = if (flashMode == ImageCapture.FLASH_MODE_ON) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                            contentDescription = "Flash",
-                            tint = if (capturedPhotos.size < maxPhotos) Color.White else Color.DarkGray
-                        )
-                    }
-
-                    // Shutter Button
-                    if (capturedPhotos.size < 3 || (capturedPhotos.size == 3 && isTakingOptionalPhoto)) {
-                        IconButton(
-                            onClick = {
-                                if (isCapturing) return@IconButton
-                                isCapturing = true
-                                val poleId = draftPole?.id ?: "P-019-019"
-                                takePhoto(
-                                    context = context,
-                                    imageCapture = imageCaptureInstance,
-                                    executor = cameraExecutor,
-                                    poleId = poleId,
-                                    lat = draftPole?.latitude ?: 0.0,
-                                    lng = draftPole?.longitude ?: 0.0,
-                                    onPhotoSaved = { file ->
-                                        onStagePhoto(file.absolutePath)
-                                        isCapturing = false
-                                        isTakingOptionalPhoto = false
-                                    },
-                                    onError = { e ->
-                                        isCapturing = false
-                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                                    }
-                                )
-                            },
-                            modifier = Modifier
-                                .size(72.dp)
-                                .clip(CircleShape)
-                                .background(Color.White)
-                                .border(4.dp, TelecomPrimary, CircleShape)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(54.dp)
-                                    .clip(CircleShape)
-                                    .background(TelecomPrimary)
-                            )
-                        }
-                    } else {
-                        Spacer(modifier = Modifier.size(72.dp)) // Maintain spacing when shutter is hidden
-                    }
-
-                    // Empty spacer to balance layout
-                    Spacer(modifier = Modifier.size(48.dp))
-                }
-            }
-        } // End Camera Preview state
-        } // End Main IF
-        
-        // Overlay directly inside the Box, avoids Dialog which can destroy SurfaceView
-        if (isCapturing) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .clickable(enabled = false) {}, // Intercept clicks
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(100.dp)
-                        .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(16.dp))
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = TelecomPrimary)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Processing...", color = Color.White, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
         }
-        } // Close the Box
-    } // Close the Scaffold
-}
 
-@Preview(showBackground = true)
-@Composable
-fun PhotoCaptureScreenPreview() {
-    TagPollingInventoryTheme {
-        PhotoCaptureScreenContent(
-            draftPole = Pole(
-                id = "P-019-019",
-                segmentId = "SEG-01",
-                sequence = 1,
-                latitude = -3.6954,
-                longitude = 128.1814,
-                poleCode = "P-019-019"
-            ),
-            networkStatus = NetworkStatus(
-                isOnline = true,
-                connectionType = "WiFi"
-            ),
-            currentLocation = LocationData(
-                latitude = -3.6954,
-                longitude = 128.1814,
-                accuracy = 2.8f,
-                altitude = 15.0,
-                isAvailable = true,
-                providerName = "GPS"
-            ),
-            pendingPhotoPath = null,
-            onBackClick = {},
-            onRemovePhoto = {},
-            onSaveAndReview = {},
-            onStagePhoto = {},
-            onAcceptPhoto = {},
-            onDiscardPhoto = {}
-        )
+        // Full Screen Inspection Dialog
+        if (inspectingPhotoPath != null) {
+            Dialog(
+                onDismissRequest = { inspectingPhotoPath = null },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                ) {
+                    AsyncImage(
+                        model = File(inspectingPhotoPath!!),
+                        contentDescription = "Full Inspection",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+
+                    IconButton(
+                        onClick = { inspectingPhotoPath = null },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(24.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                    }
+                }
+            }
+        }
     }
-}
 }

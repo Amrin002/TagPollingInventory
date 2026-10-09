@@ -29,23 +29,53 @@ fun PoleInformationScreen(
     onContinueClick: () -> Unit
 ) {
     val draftPole by viewModel.currentDraftPole.collectAsState()
+    val networkStatus by viewModel.networkStatus.collectAsState()
 
-    var poleType by remember(draftPole) { mutableStateOf(draftPole?.type ?: PoleType.CONCRETE) }
-    var poleCondition by remember(draftPole) { mutableStateOf(draftPole?.condition ?: PoleCondition.GOOD) }
-    var ownership by remember(draftPole) { mutableStateOf(draftPole?.ownership ?: PoleOwnership.LINTASARTA) }
-    var height by remember(draftPole) { mutableStateOf(draftPole?.height ?: "9m") }
-    var tagNumber by remember(draftPole) { mutableStateOf(draftPole?.tagNumber ?: "TAG-LTA-${draftPole?.id ?: "019"}") }
-    var hasFoCable by remember(draftPole) { mutableStateOf(draftPole?.hasFoCable ?: true) }
-    var cableCondition by remember(draftPole) { mutableStateOf(draftPole?.cableCondition ?: CableCondition.GOOD) }
-    var selectedEquipment by remember(draftPole) { mutableStateOf(draftPole?.equipment ?: setOf("ODP", "Closure")) }
-    var notes by remember(draftPole) { mutableStateOf(draftPole?.notes ?: "") }
+    var poleType by remember(draftPole?.id) { mutableStateOf(draftPole?.type ?: PoleType.CONCRETE) }
+    var poleCondition by remember(draftPole?.id) { mutableStateOf(draftPole?.condition ?: PoleCondition.GOOD) }
+    var ownership by remember(draftPole?.id) { mutableStateOf(draftPole?.ownership ?: PoleOwnership.LINTASARTA) }
+    var height by remember(draftPole?.id) { mutableStateOf(draftPole?.height ?: "9m") }
+    
+    val defaultTagNumber = remember(draftPole?.id) {
+        val code = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "001"
+        "TAG-${code}"
+    }
+    var tagNumber by remember(draftPole?.id) { mutableStateOf(draftPole?.tagNumber?.ifEmpty { defaultTagNumber } ?: defaultTagNumber) }
+    var hasFoCable by remember(draftPole?.id) { mutableStateOf(draftPole?.hasFoCable ?: true) }
+    var cableCondition by remember(draftPole?.id) { mutableStateOf(draftPole?.cableCondition ?: CableCondition.GOOD) }
+    var selectedEquipment by remember(draftPole?.id) { mutableStateOf(draftPole?.equipment ?: setOf("ODP", "Closure")) }
+    var notes by remember(draftPole?.id) { mutableStateOf(draftPole?.notes ?: "") }
+
+    fun syncToDraft(
+        t: PoleType = poleType,
+        c: PoleCondition = poleCondition,
+        o: PoleOwnership = ownership,
+        h: String = height,
+        tn: String = tagNumber,
+        fo: Boolean = hasFoCable,
+        cc: CableCondition = cableCondition,
+        eq: Set<String> = selectedEquipment,
+        n: String = notes
+    ) {
+        viewModel.repository.updateDraftAttributes(t, c, o, h, tn, fo, cc, eq, n)
+    }
+
+    val displayPoleCode = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "Target Pole"
+    val poleStatus = draftPole?.status ?: TagStatus.NOT_TAGGED
+
+    val (statusColor, statusBg) = when (poleStatus) {
+        TagStatus.COMPLETED -> Pair(Color(0xFF2E7D32), Color(0xFFE8F5E9))
+        TagStatus.CONFLICT -> Pair(Color(0xFFC62828), Color(0xFFFFEBEE))
+        TagStatus.NOT_TAGGED -> Pair(TelecomPrimary, Color(0xFFE3F2FD))
+    }
 
     Scaffold(
         topBar = {
             TopBar(
                 title = "Pole Information",
-                subtitle = draftPole?.id ?: "P-019-019",
-                onBackClick = onBackClick
+                subtitle = displayPoleCode,
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
@@ -77,22 +107,30 @@ fun PoleInformationScreen(
                             color = Color.Gray
                         )
                         Text(
-                            text = draftPole?.id ?: "P-019-019",
+                            text = displayPoleCode,
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
                             color = TelecomPrimary
                         )
                     }
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFFE3F2FD)
-                    ) {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = statusBg
+                        ) {
+                            Text(
+                                text = poleStatus.displayName,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = statusColor
+                            )
+                        }
                         Text(
-                            text = "Seq #${draftPole?.sequence ?: 19}",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TelecomPrimary
+                            text = "Seq #${draftPole?.sequence ?: 1}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.Gray
                         )
                     }
                 }
@@ -120,7 +158,10 @@ fun PoleInformationScreen(
                         PoleType.values().forEach { type ->
                             FilterChip(
                                 selected = poleType == type,
-                                onClick = { poleType = type },
+                                onClick = {
+                                    poleType = type
+                                    syncToDraft(t = type)
+                                },
                                 label = { Text(type.displayName) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = TelecomPrimary,
@@ -160,7 +201,10 @@ fun PoleInformationScreen(
                             }
                             FilterChip(
                                 selected = poleCondition == cond,
-                                onClick = { poleCondition = cond },
+                                onClick = {
+                                    poleCondition = cond
+                                    syncToDraft(c = cond)
+                                },
                                 label = { Text(cond.displayName) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = chipBg,
@@ -194,7 +238,10 @@ fun PoleInformationScreen(
                         PoleOwnership.values().forEach { owner ->
                             FilterChip(
                                 selected = ownership == owner,
-                                onClick = { ownership = owner },
+                                onClick = {
+                                    ownership = owner
+                                    syncToDraft(o = owner)
+                                },
                                 label = { Text(owner.displayName, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = TelecomPrimary,
@@ -224,7 +271,10 @@ fun PoleInformationScreen(
 
                     OutlinedTextField(
                         value = height,
-                        onValueChange = { height = it },
+                        onValueChange = {
+                            height = it
+                            syncToDraft(h = it)
+                        },
                         label = { Text("Pole Height") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -233,7 +283,10 @@ fun PoleInformationScreen(
 
                     OutlinedTextField(
                         value = tagNumber,
-                        onValueChange = { tagNumber = it },
+                        onValueChange = {
+                            tagNumber = it
+                            syncToDraft(tn = it)
+                        },
                         label = { Text("Pole Tag Number") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
@@ -271,7 +324,10 @@ fun PoleInformationScreen(
                         }
                         Switch(
                             checked = hasFoCable,
-                            onCheckedChange = { hasFoCable = it }
+                            onCheckedChange = {
+                                hasFoCable = it
+                                syncToDraft(fo = it)
+                            }
                         )
                     }
 
@@ -288,7 +344,10 @@ fun PoleInformationScreen(
                             CableCondition.values().forEach { cableCond ->
                                 FilterChip(
                                     selected = cableCondition == cableCond,
-                                    onClick = { cableCondition = cableCond },
+                                    onClick = {
+                                        cableCondition = cableCond
+                                        syncToDraft(cc = cableCond)
+                                    },
                                     label = { Text(cableCond.displayName, fontSize = 12.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = TelecomPrimary,
@@ -327,11 +386,13 @@ fun PoleInformationScreen(
                             Checkbox(
                                 checked = selectedEquipment.contains(eq),
                                 onCheckedChange = { checked ->
-                                    selectedEquipment = if (checked) {
+                                    val newEq = if (checked) {
                                         selectedEquipment + eq
                                     } else {
                                         selectedEquipment - eq
                                     }
+                                    selectedEquipment = newEq
+                                    syncToDraft(eq = newEq)
                                 }
                             )
                             Text(
@@ -360,7 +421,10 @@ fun PoleInformationScreen(
                     )
                     OutlinedTextField(
                         value = notes,
-                        onValueChange = { notes = it },
+                        onValueChange = {
+                            notes = it
+                            syncToDraft(n = it)
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = { Text("Enter observations, access conditions, or issues...") },
                         minLines = 3,

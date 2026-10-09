@@ -53,6 +53,9 @@ fun PoleInventoryListScreen(
         }
     }
 
+    val networkStatus by viewModel.networkStatus.collectAsState()
+    val project by viewModel.project.collectAsState()
+
     val total = allPoles.size
     val completed = allPoles.count { it.status == TagStatus.COMPLETED }
     val conflict = allPoles.count { it.status == TagStatus.CONFLICT }
@@ -62,8 +65,9 @@ fun PoleInventoryListScreen(
         topBar = {
             TopBar(
                 title = "Local Inventory List",
-                subtitle = "Jayapura Sector 2",
-                onBackClick = onBackClick
+                subtitle = "${project.name} (${allPoles.size} Poles Total)",
+                onBackClick = onBackClick,
+                networkStatus = networkStatus
             )
         }
     ) { innerPadding ->
