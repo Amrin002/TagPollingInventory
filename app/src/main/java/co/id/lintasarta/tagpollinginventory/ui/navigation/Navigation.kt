@@ -174,7 +174,10 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                             viewModel = viewModel,
                             onViewHistoryClick = { viewModel.navigateTo(ScreenFlow.FILE_MANAGEMENT) }
                         )
-                        AppTab.SETTINGS -> SettingsScreen(viewModel = viewModel)
+                        AppTab.SETTINGS -> SettingsScreen(
+                            viewModel = viewModel,
+                            onNavigateToCameraSettings = { viewModel.navigateTo(ScreenFlow.GEOTAG_CAMERA_SETTINGS) }
+                        )
                     }
                 }
 
@@ -255,6 +258,11 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                 )
 
                 ScreenFlow.FILE_MANAGEMENT -> FileManagementScreen(
+                    viewModel = viewModel,
+                    onBackClick = { viewModel.navigateBack() }
+                )
+
+                ScreenFlow.GEOTAG_CAMERA_SETTINGS -> GeotagCameraSettingsScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() }
                 )

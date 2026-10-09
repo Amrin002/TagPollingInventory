@@ -1,6 +1,7 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,9 +13,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.model.Project
 import co.id.lintasarta.tagpollinginventory.location.LocationData
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
@@ -26,7 +29,8 @@ import java.util.Locale
 
 @Composable
 fun SettingsScreen(
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    onNavigateToCameraSettings: () -> Unit
 ) {
     val project by viewModel.project.collectAsState()
     val isDownloading by viewModel.isMapDownloading.collectAsState()
@@ -51,7 +55,8 @@ fun SettingsScreen(
         onCancelMapDownload = { viewModel.cancelMapDownload() },
         onStartMapDownload = { lat, lng, radius -> viewModel.startMapDownload(lat, lng, radius) },
         onClearMapCache = { viewModel.clearMapCache() },
-        onClearAllData = { viewModel.clearAllData() }
+        onClearAllData = { viewModel.clearAllData() },
+        onNavigateToCameraSettings = onNavigateToCameraSettings
     )
 }
 
@@ -67,7 +72,8 @@ fun SettingsScreenContent(
     onCancelMapDownload: () -> Unit,
     onStartMapDownload: (lat: Double, lng: Double, radius: Double) -> Unit,
     onClearMapCache: () -> Unit,
-    onClearAllData: () -> Unit
+    onClearAllData: () -> Unit,
+    onNavigateToCameraSettings: () -> Unit
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
 
@@ -186,6 +192,62 @@ fun SettingsScreenContent(
                     Text("Total Segments", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                     Text("${project.segments.size} Segments", style = MaterialTheme.typography.bodyMedium)
                 }
+            }
+        }
+
+        // 3. Geotag Camera Settings SOP Menu Row Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onNavigateToCameraSettings() },
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(12.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color(0xFFE3F2FD), RoundedCornerShape(10.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CameraEnhance,
+                            contentDescription = null,
+                            tint = TelecomPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = "Pengaturan Kamera Geotag",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "SOP GPS, Watermark, & Metadata EXIF Foto",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                    }
+                }
+
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = Color.Gray,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
@@ -475,7 +537,8 @@ fun SettingsScreenPreview() {
             onClearMapCache = {},
             onClearAllData = {},
             networkStatus = NetworkStatus(isOnline = false, connectionType = "Offline"),
-            mapCacheSize = 0.0
+            mapCacheSize = 0.0,
+            onNavigateToCameraSettings = {}
         )
     }
 }

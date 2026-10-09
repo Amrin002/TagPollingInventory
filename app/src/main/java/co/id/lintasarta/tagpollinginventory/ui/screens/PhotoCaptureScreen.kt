@@ -41,6 +41,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import coil.compose.AsyncImage
+import co.id.lintasarta.tagpollinginventory.data.model.*
 import co.id.lintasarta.tagpollinginventory.camera.CameraPreview
 import co.id.lintasarta.tagpollinginventory.camera.takePhoto
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
@@ -48,7 +49,9 @@ import co.id.lintasarta.tagpollinginventory.location.LocationData
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
+import androidx.compose.ui.tooling.preview.Preview
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
+import co.id.lintasarta.tagpollinginventory.ui.theme.TagPollingInventoryTheme
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import java.io.File
@@ -66,12 +69,30 @@ fun PhotoCaptureScreen(
     val currentLocation by viewModel.currentLocation.collectAsState()
 
     PhotoCaptureScreenContent(
-        viewModel = viewModel,
         draftPole = draftPole,
         networkStatus = networkStatus,
         currentLocation = currentLocation,
         onBackClick = onBackClick,
-        onSaveAndReview = onSaveAndReview
+        onSaveAndReview = onSaveAndReview,
+        onSetDraftPhotoForSlot = { slotIndex, path ->
+            viewModel.repository.setDraftPhotoForSlot(slotIndex, path)
+        },
+        onRemoveDraftPhotoFromSlot = { slotIndex ->
+            viewModel.repository.removeDraftPhotoFromSlot(slotIndex)
+        },
+        onUpdateNotes = { newNotes ->
+            viewModel.repository.updateDraftAttributes(
+                type = draftPole?.type ?: PoleType.CONCRETE,
+                condition = draftPole?.condition ?: PoleCondition.GOOD,
+                ownership = draftPole?.ownership ?: PoleOwnership.LINTASARTA,
+                height = draftPole?.height ?: "9m",
+                tagNumber = draftPole?.tagNumber ?: "",
+                hasFoCable = draftPole?.hasFoCable ?: true,
+                cableCondition = draftPole?.cableCondition ?: CableCondition.GOOD,
+                equipment = draftPole?.equipment ?: setOf("ODP", "Closure"),
+                notes = newNotes
+            )
+        }
     )
 }
 
@@ -158,12 +179,14 @@ val photoCategorySpecs = listOf(
 
 @Composable
 fun PhotoCaptureScreenContent(
-    viewModel: MainViewModel,
     draftPole: Pole?,
     networkStatus: NetworkStatus,
     currentLocation: LocationData,
     onBackClick: () -> Unit,
-    onSaveAndReview: () -> Unit
+    onSaveAndReview: () -> Unit,
+    onSetDraftPhotoForSlot: (Int, String) -> Unit = { _, _ -> },
+    onRemoveDraftPhotoFromSlot: (Int) -> Unit = {},
+    onUpdateNotes: (String) -> Unit = {}
 ) {
     val context = LocalContext.current
     val rawPhotoPaths = draftPole?.photoPaths ?: emptyList()
@@ -182,6 +205,40 @@ fun PhotoCaptureScreenContent(
 
     var activeCameraSlotIndex by remember { mutableStateOf<Int?>(null) }
     var inspectingPhotoPath by remember { mutableStateOf<String?>(null) }
+
+    val slotNotesMap = remember(draftPole?.id) {
+        val map = mutableStateMapOf<Int, String>()
+        val existingNotes = draftPole?.notes ?: ""
+        existingNotes.lines().forEach { line ->
+            photoCategorySpecs.forEach { spec ->
+                val prefix = "[FOTO_${spec.index + 1}]:"
+                if (line.startsWith(prefix)) {
+                    map[spec.index] = line.removePrefix(prefix).trim()
+                }
+            }
+        }
+        map
+    }
+
+    fun updateSlotNote(slotIndex: Int, newNote: String) {
+        slotNotesMap[slotIndex] = newNote
+
+        val lines = mutableListOf<String>()
+        val existingNotes = draftPole?.notes ?: ""
+        existingNotes.lines().forEach { line ->
+            if (!line.startsWith("[FOTO_")) {
+                if (line.isNotBlank()) lines.add(line)
+            }
+        }
+        slotNotesMap.forEach { (index, note) ->
+            if (note.isNotBlank()) {
+                lines.add("[FOTO_${index + 1}]: $note")
+            }
+        }
+
+        val compiledText = lines.joinToString("\n")
+        onUpdateNotes(compiledText)
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -450,7 +507,7 @@ fun PhotoCaptureScreenContent(
                                             lat = draftPole?.latitude ?: 0.0,
                                             lng = draftPole?.longitude ?: 0.0,
                                             onPhotoSaved = { file ->
-                                                viewModel.repository.setDraftPhotoForSlot(slotIndex, file.absolutePath)
+                                                onSetDraftPhotoForSlot(slotIndex, file.absolutePath)
                                                 isCapturing = false
                                                 activeCameraSlotIndex = null
                                             },
@@ -592,6 +649,21 @@ fun PhotoCaptureScreenContent(
 
                                 HorizontalDivider()
 
+                                // ONLY FOR SLOTS 4 TO 10 (spec.index >= 3): Keterangan directly under label!
+                                if (!spec.isRequired) {
+                                    OutlinedTextField(
+                                        value = slotNotesMap[spec.index] ?: "",
+                                        onValueChange = { newText ->
+                                            updateSlotNote(spec.index, newText)
+                                        },
+                                        label = { Text("Keterangan") },
+                                        placeholder = { Text("Isikan keterangan foto opsional di sini...") },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                }
+
                                 if (isFilled) {
                                     // Large Image Preview Card (like Image 2 "LKI VSAT")
                                     Box(
@@ -650,7 +722,7 @@ fun PhotoCaptureScreenContent(
                                         }
 
                                         OutlinedButton(
-                                            onClick = { viewModel.repository.removeDraftPhotoFromSlot(spec.index) },
+                                            onClick = { onRemoveDraftPhotoFromSlot(spec.index) },
                                             modifier = Modifier.weight(1f),
                                             shape = RoundedCornerShape(8.dp),
                                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFC62828))
@@ -737,5 +809,34 @@ fun PhotoCaptureScreenContent(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PhotoCaptureScreenPreview() {
+    TagPollingInventoryTheme {
+        PhotoCaptureScreenContent(
+            draftPole = Pole(
+                id = "P-019-019",
+                segmentId = "SEG-001",
+                sequence = 1,
+                latitude = -3.6954,
+                longitude = 128.1814,
+                poleCode = "PL-JKT-001"
+            ),
+            networkStatus = NetworkStatus(
+                isOnline = true,
+                connectionType = "4G"
+            ),
+            currentLocation = LocationData(
+                latitude = -3.6954,
+                longitude = 128.1814,
+                accuracy = 3.2f,
+                isAvailable = true
+            ),
+            onBackClick = {},
+            onSaveAndReview = {}
+        )
     }
 }

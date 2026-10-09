@@ -53,7 +53,8 @@ enum class ScreenFlow {
     EXPORT_PROGRESS,
     FILE_MANAGEMENT,
     IMPORT_ROUTE,
-    IMPORT_PREVIEW
+    IMPORT_PREVIEW,
+    GEOTAG_CAMERA_SETTINGS
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
