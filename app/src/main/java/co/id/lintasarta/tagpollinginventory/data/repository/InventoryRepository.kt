@@ -360,7 +360,7 @@ class InventoryRepository(private val context: Context) {
         val current = _currentDraftPole.value
         if (current != null) {
             val currentList = current.photoPaths.toMutableList()
-            if (currentList.size < 3) {
+            if (currentList.size < 4) { // Increased capacity to 4
                 currentList.add(photoPath)
                 val updated = current.copy(photoPaths = currentList)
                 _currentDraftPole.value = updated
@@ -374,12 +374,36 @@ class InventoryRepository(private val context: Context) {
                 val pole = if (targetId.isNotEmpty()) dao.getPoleById(targetId) else null
                 if (pole != null) {
                     val currentList = pole.photoPaths.toMutableList()
-                    if (currentList.size < 3) {
+                    if (currentList.size < 4) { // Increased capacity to 4
                         currentList.add(photoPath)
                         val updated = pole.copy(photoPaths = currentList)
                         _currentDraftPole.value = updated
                         dao.insertPole(updated)
                     }
+                }
+            }
+        }
+    }
+
+    fun addDraftPhotoWithNotes(photoPath: String, additionalNote: String) {
+        val current = _currentDraftPole.value
+        if (current != null) {
+            val currentList = current.photoPaths.toMutableList()
+            if (currentList.size < 4) { // Support for 4th photo
+                currentList.add(photoPath)
+                var updatedNotes = current.notes
+                if (additionalNote.isNotBlank()) {
+                    updatedNotes = if (updatedNotes.isEmpty()) {
+                        "[Tambahan]: $additionalNote"
+                    } else {
+                        "$updatedNotes\n[Tambahan]: $additionalNote"
+                    }
+                }
+                
+                val updated = current.copy(photoPaths = currentList, notes = updatedNotes)
+                _currentDraftPole.value = updated
+                scope.launch {
+                    dao.insertPole(updated)
                 }
             }
         }

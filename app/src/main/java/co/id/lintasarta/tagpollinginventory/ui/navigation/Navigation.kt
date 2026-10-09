@@ -158,6 +158,7 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                             viewModel = viewModel,
                             onContinueFieldWork = { viewModel.navigateTo(ScreenFlow.FIELD_MAP) },
                             onViewProject = { viewModel.switchTab(AppTab.SEGMENTS) },
+                            onCreateSegmentClick = { viewModel.navigateTo(ScreenFlow.CREATE_SEGMENT) },
                             onImportRouteClick = { viewModel.navigateTo(ScreenFlow.IMPORT_ROUTE) }
                         )
                         AppTab.SEGMENTS -> SegmentListScreen(
@@ -220,7 +221,7 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                 ScreenFlow.PHOTO_CAPTURE -> PhotoCaptureScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() },
-                    onUsePhotoClick = { viewModel.navigateTo(ScreenFlow.REVIEW_POLE) }
+                    onSaveAndReview = { viewModel.navigateTo(ScreenFlow.REVIEW_POLE) }
                 )
 
                 ScreenFlow.REVIEW_POLE -> ReviewPoleScreen(

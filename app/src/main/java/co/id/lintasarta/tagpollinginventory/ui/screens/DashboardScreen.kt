@@ -27,6 +27,7 @@ fun DashboardScreen(
     viewModel: MainViewModel,
     onContinueFieldWork: () -> Unit,
     onViewProject: () -> Unit,
+    onCreateSegmentClick: () -> Unit,
     onImportRouteClick: () -> Unit
 ) {
     val project by viewModel.project.collectAsState()
@@ -237,13 +238,13 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Main Action Buttons (Branching: New Field Work vs Continue Field Work)
+        // Main Action Buttons (Branching: New Field Work -> Create Segment vs Continue Field Work)
         Button(
             onClick = {
                 if (hasWorkData) {
                     onContinueFieldWork()
                 } else {
-                    onImportRouteClick()
+                    onCreateSegmentClick()
                 }
             },
             modifier = Modifier

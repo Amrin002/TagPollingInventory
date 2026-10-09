@@ -25,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,6 +85,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val poles = repository.poles
     val exportFiles = repository.exportFiles
     val currentDraftPole = repository.currentDraftPole
+
+    private val _pendingPhotoPath = MutableStateFlow<String?>(null)
+    val pendingPhotoPath: StateFlow<String?> = _pendingPhotoPath.asStateFlow()
 
     // Route State
     val importedRoutes = routeRepository.importedRoutes
@@ -414,11 +418,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(ScreenFlow.PHOTO_CAPTURE)
     }
 
-    fun addPhotoAndContinue(photoPath: String) {
-        repository.addDraftPhoto(photoPath)
-        // If 3 photos reached, we could auto-navigate, but let's let the UI handle when to navigate
+    fun stagePhotoForPreview(photoPath: String) {
+        _pendingPhotoPath.value = photoPath
     }
-    
+
+    fun acceptPendingPhoto(additionalNotes: String = "") {
+        val path = _pendingPhotoPath.value ?: return
+        if (additionalNotes.isNotBlank()) {
+            repository.addDraftPhotoWithNotes(path, additionalNotes)
+        } else {
+            repository.addDraftPhoto(path)
+        }
+        _pendingPhotoPath.value = null
+    }
+
+    fun discardPendingPhoto() {
+        val path = _pendingPhotoPath.value
+        if (path != null) {
+            val file = File(path)
+            if (file.exists()) {
+                file.delete()
+            }
+        }
+        _pendingPhotoPath.value = null
+    }
+
     fun removePhoto(photoPath: String) {
         repository.removeDraftPhoto(photoPath)
     }

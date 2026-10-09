@@ -49,25 +49,31 @@ import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import java.io.File
 import java.util.Locale
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextFieldDefaults
 
 @Composable
 fun PhotoCaptureScreen(
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
-    onUsePhotoClick: () -> Unit
+    onSaveAndReview: () -> Unit
 ) {
     val draftPole by viewModel.currentDraftPole.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
+    val pendingPhotoPath by viewModel.pendingPhotoPath.collectAsState()
 
     PhotoCaptureScreenContent(
         draftPole = draftPole,
         networkStatus = networkStatus,
         currentLocation = currentLocation,
+        pendingPhotoPath = pendingPhotoPath,
         onBackClick = onBackClick,
-        onUsePhotoClick = onUsePhotoClick,
-        onRemovePhoto = { photoPath -> viewModel.removePhoto(photoPath) },
-        onAddPhotoAndContinue = { photoPath -> viewModel.addPhotoAndContinue(photoPath) }
+        onRemovePhoto = { path -> viewModel.removePhoto(path) },
+        onSaveAndReview = onSaveAndReview,
+        onStagePhoto = { path -> viewModel.stagePhotoForPreview(path) },
+        onAcceptPhoto = { note -> viewModel.acceptPendingPhoto(note) },
+        onDiscardPhoto = { viewModel.discardPendingPhoto() }
     )
 }
 
@@ -76,14 +82,17 @@ fun PhotoCaptureScreenContent(
     draftPole: Pole?,
     networkStatus: NetworkStatus,
     currentLocation: LocationData,
+    pendingPhotoPath: String?,
     onBackClick: () -> Unit,
-    onUsePhotoClick: () -> Unit,
     onRemovePhoto: (String) -> Unit,
-    onAddPhotoAndContinue: (String) -> Unit
+    onSaveAndReview: () -> Unit,
+    onStagePhoto: (String) -> Unit,
+    onAcceptPhoto: (String) -> Unit,
+    onDiscardPhoto: () -> Unit
 ) {
     val context = LocalContext.current
     val capturedPhotos = draftPole?.photoPaths ?: emptyList()
-    val maxPhotos = 3
+    val maxPhotos = 4 // Up to 4 photos (3 required + 1 optional)
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -111,7 +120,90 @@ fun PhotoCaptureScreenContent(
     var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_BACK_CAMERA) }
     var imageCaptureInstance by remember { mutableStateOf<ImageCapture?>(null) }
     val cameraExecutor = remember { ContextCompat.getMainExecutor(context) }
+    
+    var additionalNoteText by remember { mutableStateOf("") }
+    var isTakingOptionalPhoto by remember { mutableStateOf(false) }
 
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (pendingPhotoPath != null) {
+            // STATE: PHOTO PREVIEW
+            Column(
+                modifier = Modifier.fillMaxSize().background(Color.Black)
+            ) {
+                TopBar(
+                    title = "Preview Photo",
+                    subtitle = if (capturedPhotos.size >= 3) "Optional Documentation" else "Photo ${capturedPhotos.size + 1} of 3",
+                    onBackClick = onDiscardPhoto,
+                    networkStatus = networkStatus
+                )
+
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = pendingPhotoPath,
+                        contentDescription = "Preview",
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                if (capturedPhotos.size >= 3) {
+                    // Optional Note Input for 4th photo
+                    Surface(color = Color.Black.copy(alpha = 0.8f)) {
+                        OutlinedTextField(
+                            value = additionalNoteText,
+                            onValueChange = { additionalNoteText = it },
+                            placeholder = { Text("Tambahkan catatan dokumentasi (Opsional)...", color = Color.Gray) },
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.DarkGray,
+                                unfocusedContainerColor = Color.DarkGray,
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                cursorColor = TelecomPrimary,
+                                focusedIndicatorColor = TelecomPrimary,
+                                unfocusedIndicatorColor = Color.Transparent
+                            )
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color(0xFF1E1E1E),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        Button(
+                            onClick = onDiscardPhoto,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Retake")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Retake")
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Button(
+                            onClick = {
+                                onAcceptPhoto(additionalNoteText)
+                                additionalNoteText = ""
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Accept")
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("OK")
+                        }
+                    }
+                }
+            }
+        } else {
+            // STATE: CAMERA PREVIEW
     Scaffold(
         topBar = {
             TopBar(
@@ -168,7 +260,7 @@ fun PhotoCaptureScreenContent(
             ) {
                 if (hasCameraPermission) {
                     // Real CameraX Live Preview Feed!
-                    if (capturedPhotos.size < maxPhotos) {
+                    if (capturedPhotos.size < 3 || (capturedPhotos.size == 3 && isTakingOptionalPhoto)) {
                         CameraPreview(
                             cameraSelector = cameraSelector,
                             flashMode = flashMode,
@@ -243,20 +335,39 @@ fun PhotoCaptureScreenContent(
                             }
                         }
                     } else {
-                        // Max photos reached preview
+                        // 3 Photos Reached - Branching UI
                         Box(
                             modifier = Modifier.fillMaxSize().background(Color(0xFF263238)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = null,
                                     tint = Color(0xFF4CAF50),
-                                    modifier = Modifier.size(64.dp)
+                                    modifier = Modifier.size(80.dp)
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Text("All required photos captured", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("3 Required Photos Captured", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                                
+                                Spacer(modifier = Modifier.height(24.dp))
+                                
+                                Button(
+                                    onClick = { isTakingOptionalPhoto = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black),
+                                    modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+                                ) {
+                                    Icon(Icons.Default.AddAPhoto, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Tambahkan Foto (Opsional)", fontWeight = FontWeight.Bold)
+                                }
+                                
+                                Button(
+                                    onClick = onSaveAndReview,
+                                    colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary, contentColor = Color.White),
+                                    modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+                                ) {
+                                    Text("Selesai & Lanjut ke Review", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -358,7 +469,7 @@ fun PhotoCaptureScreenContent(
                     }
 
                     // Shutter Button
-                    if (capturedPhotos.size < maxPhotos) {
+                    if (capturedPhotos.size < 3 || (capturedPhotos.size == 3 && isTakingOptionalPhoto)) {
                         IconButton(
                             onClick = {
                                 if (isCapturing) return@IconButton
@@ -372,8 +483,9 @@ fun PhotoCaptureScreenContent(
                                     lat = draftPole?.latitude ?: 0.0,
                                     lng = draftPole?.longitude ?: 0.0,
                                     onPhotoSaved = { file ->
-                                        onAddPhotoAndContinue(file.absolutePath)
+                                        onStagePhoto(file.absolutePath)
                                         isCapturing = false
+                                        isTakingOptionalPhoto = false
                                     },
                                     onError = { e ->
                                         isCapturing = false
@@ -398,20 +510,12 @@ fun PhotoCaptureScreenContent(
                         Spacer(modifier = Modifier.size(72.dp)) // Maintain spacing when shutter is hidden
                     }
 
-                    // Finish / Next Button
-                    Button(
-                        onClick = onUsePhotoClick,
-                        enabled = true,
-//                            capturedPhotos.isNotEmpty() && !isCapturing,
-                        colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
-                    ) {
-                        Text(if (capturedPhotos.size >= maxPhotos) "Finish" else "Next", fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(18.dp))
-                    }
+                    // Empty spacer to balance layout
+                    Spacer(modifier = Modifier.size(48.dp))
                 }
             }
-        }
+        } // End Camera Preview state
+        } // End Main IF
         
         // Overlay directly inside the Box, avoids Dialog which can destroy SurfaceView
         if (isCapturing) {
@@ -466,10 +570,14 @@ fun PhotoCaptureScreenPreview() {
                 isAvailable = true,
                 providerName = "GPS"
             ),
+            pendingPhotoPath = null,
             onBackClick = {},
-            onUsePhotoClick = {},
             onRemovePhoto = {},
-            onAddPhotoAndContinue = {}
+            onSaveAndReview = {},
+            onStagePhoto = {},
+            onAcceptPhoto = {},
+            onDiscardPhoto = {}
         )
     }
+}
 }
