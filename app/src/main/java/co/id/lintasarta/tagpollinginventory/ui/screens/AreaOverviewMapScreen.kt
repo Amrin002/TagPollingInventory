@@ -27,6 +27,7 @@ import co.id.lintasarta.tagpollinginventory.ui.components.OsmMultiSegmentMapView
 import co.id.lintasarta.tagpollinginventory.ui.components.SegmentStatusBadge
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import java.util.Locale
@@ -249,7 +250,30 @@ fun AreaOverviewMapScreen(
                             FilterChip(
                                 selected = isSelected,
                                 onClick = {
-                                    selectedFilterKey = key
+                                    if (selectedFilterKey == key) {
+                                        // Ketuk ulang chip yang sedang aktif -> fokuskan kembali kamera ke area filter ini
+                                        val points = filteredSegments.flatMap { it.routeCoordinates }
+                                            .filter { it.latitude in -11.0..6.0 && it.longitude in 120.0..142.0 }
+                                        if (points.isNotEmpty()) {
+                                            val minLat = points.minOf { it.latitude }
+                                            val maxLat = points.maxOf { it.latitude }
+                                            val minLng = points.minOf { it.longitude }
+                                            val maxLng = points.maxOf { it.longitude }
+                                            val latSpan = maxLat - minLat
+                                            val lngSpan = maxLng - minLng
+                                            if (latSpan > 0.005 || lngSpan > 0.005) {
+                                                val padLat = latSpan.coerceAtLeast(0.01) * 0.15
+                                                val padLng = lngSpan.coerceAtLeast(0.01) * 0.15
+                                                val bbox = BoundingBox(maxLat + padLat, maxLng + padLng, minLat - padLat, minLng - padLng)
+                                                osmMapViewInstance?.zoomToBoundingBox(bbox, true, 80)
+                                            } else {
+                                                osmMapViewInstance?.controller?.setCenter(GeoPoint((minLat + maxLat) / 2.0, (minLng + maxLng) / 2.0))
+                                                osmMapViewInstance?.controller?.setZoom(14.0)
+                                            }
+                                        }
+                                    } else {
+                                        selectedFilterKey = key
+                                    }
                                     selectedSegment = null
                                 },
                                 label = {
@@ -408,7 +432,45 @@ fun AreaOverviewMapScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
-                            SegmentStatusBadge(status = segment.status)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        val coords = segment.routeCoordinates
+                                        if (coords.isNotEmpty()) {
+                                            val validCoords = coords.filter { it.latitude in -11.0..6.0 && it.longitude in 120.0..142.0 }
+                                            if (validCoords.isNotEmpty()) {
+                                                val minLat = validCoords.minOf { it.latitude }
+                                                val maxLat = validCoords.maxOf { it.latitude }
+                                                val minLng = validCoords.minOf { it.longitude }
+                                                val maxLng = validCoords.maxOf { it.longitude }
+                                                val latSpan = maxLat - minLat
+                                                val lngSpan = maxLng - minLng
+                                                if (latSpan > 0.002 || lngSpan > 0.002) {
+                                                    val padLat = latSpan.coerceAtLeast(0.005) * 0.25
+                                                    val padLng = lngSpan.coerceAtLeast(0.005) * 0.25
+                                                    val segBbox = BoundingBox(maxLat + padLat, maxLng + padLng, minLat - padLat, minLng - padLng)
+                                                    osmMapViewInstance?.zoomToBoundingBox(segBbox, true, 100)
+                                                } else {
+                                                    osmMapViewInstance?.controller?.animateTo(GeoPoint(validCoords.first().latitude, validCoords.first().longitude))
+                                                    osmMapViewInstance?.controller?.setZoom(16.0)
+                                                }
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CenterFocusStrong,
+                                        contentDescription = "Fokuskan Kamera ke Rute Ini",
+                                        tint = TelecomPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                                SegmentStatusBadge(status = segment.status)
+                            }
                         }
 
                         Surface(
