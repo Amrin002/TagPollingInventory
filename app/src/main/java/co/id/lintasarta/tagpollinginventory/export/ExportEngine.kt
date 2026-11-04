@@ -13,6 +13,219 @@ class ExportEngine(private val context: Context) {
 
     private val exportDir = File(context.filesDir, "exports").apply { if (!exists()) mkdirs() }
 
+    /**
+     * Menghasilkan Ekspor File Resmi Alpaca Master CSV: Alpaca_Master_Poles.csv
+     * Kompatibel dengan controller eNims dan script backend Alpaca_kmz.py.
+     */
+    fun generateAlpacaMasterCsv(poles: List<Pole>, targetFile: File? = null): File {
+        val file = targetFile ?: File(exportDir, "Alpaca_Master_Poles.csv")
+        val sb = StringBuilder()
+        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,sync_status,timestamp,photo_sha256\n")
+
+        for (pole in poles) {
+            val photoFileName = if (!pole.photoPath.isNullOrEmpty()) {
+                File(pole.photoPath).name
+            } else {
+                ""
+            }
+            val rawLat = pole.rawLatitude ?: pole.latitude
+            val rawLng = pole.rawLongitude ?: pole.longitude
+
+            sb.append("\"${pole.effectiveAssetUid}\",")
+            sb.append("\"${pole.segmentId}\",")
+            sb.append("\"${pole.routeName.replace("\"", "'")}\",")
+            sb.append("\"${pole.poId}\",")
+            sb.append("\"${pole.assetClass}\",")
+            sb.append("\"${pole.assetType}\",")
+            sb.append("${pole.latitude},")
+            sb.append("${pole.longitude},")
+            sb.append("$rawLat,")
+            sb.append("$rawLng,")
+            sb.append("${pole.accuracy},")
+            sb.append("\"$photoFileName\",")
+            sb.append("\"${pole.ownership.displayName}\",")
+            sb.append("\"${pole.condition.displayName}\",")
+            sb.append("${pole.isSafetyDeferred},")
+            sb.append("\"${pole.matchStatus}\",")
+            sb.append("\"${pole.syncStatus}\",")
+            sb.append("\"${pole.capturedTimestamp}\",")
+            sb.append("\"${pole.photoSha256 ?: ""}\"\n")
+        }
+
+        file.writeText(sb.toString())
+        return file
+    }
+
+    /**
+     * Menghasilkan Ekspor File Resmi Alpaca Master KMZ: Alpaca_Master.kmz
+     * Berisi placemarks T7/T9, rute polyline kabel FO, dan bundle foto tiang di folder images/.
+     */
+    fun generateAlpacaMasterKmz(
+        poles: List<Pole>,
+        segmentName: String,
+        importedRoute: ImportedRoute? = null,
+        targetFile: File? = null
+    ): File {
+        val file = targetFile ?: File(exportDir, "Alpaca_Master.kmz")
+        val kmlContent = generateAlpacaKmlContent(poles, segmentName, importedRoute)
+
+        ZipOutputStream(FileOutputStream(file)).use { zip ->
+            // 1. Masukkan file KML utama doc.kml
+            val kmlEntry = ZipEntry("doc.kml")
+            zip.putNextEntry(kmlEntry)
+            zip.write(kmlContent.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
+            // 2. Masukkan file foto aktual tiang ke dalam folder images/
+            for (pole in poles) {
+                if (!pole.photoPath.isNullOrEmpty()) {
+                    val photoSrc = File(pole.photoPath)
+                    val photoName = photoSrc.name
+                    val photoEntry = ZipEntry("images/$photoName")
+                    zip.putNextEntry(photoEntry)
+                    if (photoSrc.exists()) {
+                        zip.write(photoSrc.readBytes())
+                    } else {
+                        val dummy = createDummyJpgBytes(pole.effectiveAssetUid)
+                        zip.write(dummy)
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+        return file
+    }
+
+    private fun generateAlpacaKmlContent(
+        poles: List<Pole>,
+        segmentName: String,
+        importedRoute: ImportedRoute?
+    ): String {
+        val sb = StringBuilder()
+        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+        sb.append("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n")
+        sb.append("  <Document>\n")
+        sb.append("    <name>Alpaca Master Poles - $segmentName</name>\n")
+        sb.append("    <description>Project Alpaca PRA Survey & As-Built Poles (Regional MPO)</description>\n\n")
+
+        // Styles untuk P7 (Orange) & P9 (Cyan/Biru) & Safety Deferral (Merah)
+        sb.append("    <Style id=\"p9Pole\">\n")
+        sb.append("      <IconStyle>\n")
+        sb.append("        <color>ffffa500</color>\n") // Cyan / Blueish
+        sb.append("        <scale>1.2</scale>\n")
+        sb.append("        <Icon><href>http://maps.google.com/mapfiles/kml/paddle/blu-circle.png</href></Icon>\n")
+        sb.append("      </IconStyle>\n")
+        sb.append("    </Style>\n")
+
+        sb.append("    <Style id=\"p7Pole\">\n")
+        sb.append("      <IconStyle>\n")
+        sb.append("        <color>ff00a5ff</color>\n") // Orange / Amber
+        sb.append("        <scale>1.1</scale>\n")
+        sb.append("        <Icon><href>http://maps.google.com/mapfiles/kml/paddle/orange-circle.png</href></Icon>\n")
+        sb.append("      </IconStyle>\n")
+        sb.append("    </Style>\n")
+
+        sb.append("    <Style id=\"safetyDeferredPole\">\n")
+        sb.append("      <IconStyle>\n")
+        sb.append("        <color>ff0000ff</color>\n") // Red
+        sb.append("        <scale>1.2</scale>\n")
+        sb.append("        <Icon><href>http://maps.google.com/mapfiles/kml/paddle/red-diamond.png</href></Icon>\n")
+        sb.append("      </IconStyle>\n")
+        sb.append("    </Style>\n")
+
+        sb.append("    <Style id=\"fiberRouteLine\">\n")
+        sb.append("      <LineStyle>\n")
+        sb.append("        <color>ffc06515</color>\n") // Telecom Blue
+        sb.append("        <width>5.0</width>\n")
+        sb.append("      </LineStyle>\n")
+        sb.append("    </Style>\n\n")
+
+        // 1. Garis Polyline Jalur Fiber Optik
+        if (importedRoute != null && importedRoute.coordinates.isNotEmpty()) {
+            sb.append("    <Placemark>\n")
+            sb.append("      <name>Rute Kabel FO - ${importedRoute.name}</name>\n")
+            sb.append("      <styleUrl>#fiberRouteLine</styleUrl>\n")
+            sb.append("      <LineString>\n")
+            sb.append("        <coordinates>\n")
+            importedRoute.coordinates.forEach { c ->
+                sb.append("          ${c.longitude},${c.latitude},${c.altitude}\n")
+            }
+            sb.append("        </coordinates>\n")
+            sb.append("      </LineString>\n")
+            sb.append("    </Placemark>\n\n")
+        }
+
+        // 2. Placemarks Tiang Alpaca PRA
+        for (pole in poles) {
+            val styleUrl = when {
+                pole.isSafetyDeferred -> "#safetyDeferredPole"
+                pole.assetClass == "pole_7" -> "#p7Pole"
+                else -> "#p9Pole"
+            }
+
+            val photoFileName = if (!pole.photoPath.isNullOrEmpty()) File(pole.photoPath).name else null
+
+            sb.append("    <Placemark>\n")
+            sb.append("      <name>${pole.effectiveAssetUid}</name>\n")
+            sb.append("      <styleUrl>$styleUrl</styleUrl>\n")
+
+            // HTML Description CDATA
+            sb.append("      <description><![CDATA[\n")
+            sb.append("        <div style=\"font-family: Arial, sans-serif; padding: 10px; max-width: 320px;\">\n")
+            sb.append("          <h3 style=\"margin:0 0 6px 0; color:#1565C0;\">${pole.effectiveAssetUid}</h3>\n")
+            sb.append("          <p style=\"margin:0 0 10px 0; color:#546E7A; font-size:12px;\"><b>Segmen:</b> ${pole.routeName}</p>\n")
+            sb.append("          <table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" style=\"border-collapse:collapse; width:100%; font-size:12px;\">\n")
+            sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Klasifikasi</b></td><td>${if (pole.assetClass == "pole_7") "Tiang 7M (T7)" else "Tiang 9M (T9)"}</td></tr>\n")
+            sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Material</b></td><td>${pole.assetType.uppercase()}</td></tr>\n")
+            sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Koordinat</b></td><td>${pole.latitude}, ${pole.longitude} (±${pole.accuracy}m)</td></tr>\n")
+            if (pole.rawLatitude != null && pole.rawLongitude != null) {
+                sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>GNSS Raw</b></td><td>${pole.rawLatitude}, ${pole.rawLongitude}</td></tr>\n")
+            }
+            sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Kepemilikan</b></td><td>${pole.ownership.displayName}</td></tr>\n")
+            sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Kondisi</b></td><td>${pole.condition.displayName}</td></tr>\n")
+            if (pole.isSafetyDeferred) {
+                sb.append("            <tr><td style=\"background:#FFEBEE; color:#C62828;\"><b>Safety Deferral</b></td><td style=\"color:#C62828;\">${pole.safetyDeferralReason ?: "Terhalang"}</td></tr>\n")
+            }
+            sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Waktu Survei</b></td><td>${pole.capturedTimestamp}</td></tr>\n")
+            if (!pole.photoSha256.isNullOrEmpty()) {
+                sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>SHA-256</b></td><td style=\"font-family:monospace; font-size:10px;\">${pole.photoSha256.take(16)}...</td></tr>\n")
+            }
+            sb.append("          </table>\n")
+
+            if (photoFileName != null) {
+                sb.append("          <br/>\n")
+                sb.append("          <img src=\"images/$photoFileName\" width=\"300\" style=\"border-radius:6px;\"/>\n")
+            }
+            sb.append("        </div>\n")
+            sb.append("      ]]></description>\n")
+
+            // ExtendedData untuk integrasi sistem Alpaca / eNims
+            sb.append("      <ExtendedData>\n")
+            sb.append("        <Data name=\"asset_uid\"><value>${pole.effectiveAssetUid}</value></Data>\n")
+            sb.append("        <Data name=\"asset_class\"><value>${pole.assetClass}</value></Data>\n")
+            sb.append("        <Data name=\"asset_type\"><value>${pole.assetType}</value></Data>\n")
+            sb.append("        <Data name=\"po_id\"><value>${pole.poId}</value></Data>\n")
+            sb.append("        <Data name=\"segment_id\"><value>${pole.segmentId}</value></Data>\n")
+            sb.append("        <Data name=\"accuracy\"><value>${pole.accuracy}</value></Data>\n")
+            sb.append("        <Data name=\"is_safety_deferred\"><value>${pole.isSafetyDeferred}</value></Data>\n")
+            sb.append("        <Data name=\"match_status\"><value>${pole.matchStatus}</value></Data>\n")
+            sb.append("        <Data name=\"sync_status\"><value>${pole.syncStatus}</value></Data>\n")
+            sb.append("      </ExtendedData>\n")
+
+            sb.append("      <Point>\n")
+            sb.append("        <coordinates>${pole.longitude},${pole.latitude},0</coordinates>\n")
+            sb.append("      </Point>\n")
+            sb.append("    </Placemark>\n\n")
+        }
+
+        sb.append("  </Document>\n")
+        sb.append("</kml>\n")
+        return sb.toString()
+    }
+
+    /**
+     * Kompatibilitas dengan alur ekspor generik aplikasi
+     */
     fun generateExport(
         projectName: String,
         segmentName: String,
@@ -35,9 +248,12 @@ class ExportEngine(private val context: Context) {
         val targetFile = File(exportDir, fileName)
 
         when (format) {
-            ExportFormat.CSV -> generateCsv(targetFile, filteredPoles, options)
-            ExportFormat.KML -> generateKml(targetFile, filteredPoles, segmentName, options, importedRoute)
-            ExportFormat.KMZ -> generateKmz(targetFile, filteredPoles, segmentName, options, importedRoute)
+            ExportFormat.CSV -> generateAlpacaMasterCsv(filteredPoles, targetFile)
+            ExportFormat.KML -> {
+                val kmlText = generateAlpacaKmlContent(filteredPoles, segmentName, importedRoute)
+                targetFile.writeText(kmlText)
+            }
+            ExportFormat.KMZ -> generateAlpacaMasterKmz(filteredPoles, segmentName, importedRoute, targetFile)
         }
 
         return ExportFile(
@@ -52,179 +268,8 @@ class ExportEngine(private val context: Context) {
         )
     }
 
-    private fun generateCsv(file: File, poles: List<Pole>, options: ExportOptions) {
-        val sb = StringBuilder()
-        sb.append("Pole Code,Internal ID,Segment,Latitude,Longitude,GPS Accuracy (m),Pole Type,Condition,Ownership,Height,Tag Number,FO Cable,Cable Condition,Equipment,Notes,Timestamp,Photo\n")
-
-        for (pole in poles) {
-            sb.append("\"${pole.poleCode}\",")
-            sb.append("\"${pole.id}\",")
-            sb.append("\"${pole.segmentId}\",")
-            sb.append("${if (options.includeCoordinates) pole.latitude else ""},")
-            sb.append("${if (options.includeCoordinates) pole.longitude else ""},")
-            sb.append("${if (options.includeCoordinates) pole.accuracy else ""},")
-            sb.append("\"${if (options.includeAttributes) pole.type.displayName else ""}\",")
-            sb.append("\"${if (options.includeAttributes) pole.condition.displayName else ""}\",")
-            sb.append("\"${if (options.includeAttributes) pole.ownership.displayName else ""}\",")
-            sb.append("\"${if (options.includeAttributes) pole.height else ""}\",")
-            sb.append("\"${if (options.includeAttributes) pole.tagNumber else ""}\",")
-            sb.append("\"${if (options.includeAttributes) if (pole.hasFoCable) "Yes" else "No" else ""}\",")
-            sb.append("\"${if (options.includeAttributes) pole.cableCondition.displayName else ""}\",")
-            sb.append("\"${if (options.includeAttributes) pole.equipment.joinToString("; ") else ""}\",")
-            sb.append("\"${if (options.includeNotes) pole.notes.replace("\"", "'") else ""}\",")
-            sb.append("\"${if (options.includeTimestamp) pole.capturedTimestamp else ""}\",")
-            sb.append("\"${if (options.includePhotos) pole.photoPaths.joinToString("; ") else ""}\"\n")
-        }
-
-        file.writeText(sb.toString())
-    }
-
-    private fun generateKmlContent(
-        poles: List<Pole>,
-        segmentName: String,
-        options: ExportOptions,
-        isKmz: Boolean,
-        importedRoute: ImportedRoute?
-    ): String {
-        val sb = StringBuilder()
-        sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
-        sb.append("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n")
-        sb.append("  <Document>\n")
-        sb.append("    <name>Tag Polling Inventory - $segmentName</name>\n")
-        sb.append("    <description>Exported Fiber Optic Pole Survey Data</description>\n\n")
-
-        // Styles
-        sb.append("    <Style id=\"completedPole\">\n")
-        sb.append("      <IconStyle><color>ff008000</color><scale>1.1</scale></IconStyle>\n")
-        sb.append("    </Style>\n")
-        sb.append("    <Style id=\"conflictPole\">\n")
-        sb.append("      <IconStyle><color>ff0000ff</color><scale>1.2</scale></IconStyle>\n")
-        sb.append("    </Style>\n")
-        sb.append("    <Style id=\"uncompletedPole\">\n")
-        sb.append("      <IconStyle><color>ff808080</color><scale>0.9</scale></IconStyle>\n")
-        sb.append("    </Style>\n\n")
-
-        // 1. Reference FO Route LineString if available
-        if (importedRoute != null && importedRoute.coordinates.isNotEmpty()) {
-            sb.append("    <Placemark>\n")
-            sb.append("      <name>FO Reference Route - ${importedRoute.name}</name>\n")
-            sb.append("      <description>Reference FO Route imported from ${importedRoute.sourceFileName}</description>\n")
-            sb.append("      <LineString>\n")
-            sb.append("        <coordinates>\n")
-            importedRoute.coordinates.forEach { c ->
-                sb.append("          ${c.longitude},${c.latitude},${c.altitude}\n")
-            }
-            sb.append("        </coordinates>\n")
-            sb.append("      </LineString>\n")
-            sb.append("    </Placemark>\n\n")
-        }
-
-        // 2. Surveyed Poles Placemarks
-        for (pole in poles) {
-            val style = when (pole.status) {
-                TagStatus.COMPLETED -> "#completedPole"
-                TagStatus.CONFLICT -> "#conflictPole"
-                TagStatus.NOT_TAGGED -> "#uncompletedPole"
-            }
-
-            sb.append("    <Placemark>\n")
-            sb.append("      <name>${pole.poleCode}</name>\n")
-            sb.append("      <styleUrl>$style</styleUrl>\n")
-
-            // HTML Description
-            sb.append("      <description><![CDATA[\n")
-            sb.append("        <div style=\"font-family: Arial, sans-serif; padding: 8px;\">\n")
-            sb.append("          <h3 style=\"margin:0 0 8px 0; color:#1565C0;\">Pole Code: ${pole.poleCode}</h3>\n")
-            sb.append("          <table border=\"1\" cellpadding=\"4\" cellspacing=\"0\" style=\"border-collapse:collapse;\">\n")
-            sb.append("            <tr><td><b>Internal ID</b></td><td>${pole.id}</td></tr>\n")
-            sb.append("            <tr><td><b>Status</b></td><td>${pole.status.displayName}</td></tr>\n")
-            if (options.includeCoordinates) {
-                sb.append("            <tr><td><b>Coordinates</b></td><td>${pole.latitude}, ${pole.longitude} (±${pole.accuracy}m)</td></tr>\n")
-            }
-            if (options.includeAttributes) {
-                sb.append("            <tr><td><b>Pole Type</b></td><td>${pole.type.displayName} (${pole.height})</td></tr>\n")
-                sb.append("            <tr><td><b>Condition</b></td><td>${pole.condition.displayName}</td></tr>\n")
-                sb.append("            <tr><td><b>Ownership</b></td><td>${pole.ownership.displayName}</td></tr>\n")
-                sb.append("            <tr><td><b>Tag Number</b></td><td>${pole.tagNumber}</td></tr>\n")
-                sb.append("            <tr><td><b>FO Cable</b></td><td>${if (pole.hasFoCable) "Yes" else "No"} (${pole.cableCondition.displayName})</td></tr>\n")
-                sb.append("            <tr><td><b>Equipment</b></td><td>${pole.equipment.joinToString(", ")}</td></tr>\n")
-            }
-            if (options.includeNotes && pole.notes.isNotEmpty()) {
-                sb.append("            <tr><td><b>Notes</b></td><td>${pole.notes}</td></tr>\n")
-            }
-            if (options.includeTimestamp && pole.capturedTimestamp.isNotEmpty()) {
-                sb.append("            <tr><td><b>Timestamp</b></td><td>${pole.capturedTimestamp}</td></tr>\n")
-            }
-            sb.append("          </table>\n")
-
-            if (isKmz && options.includePhotoReferences && pole.photoPaths.isNotEmpty()) {
-                sb.append("          <br/>\n")
-                pole.photoPaths.forEachIndexed { index, _ ->
-                    val photoName = "photo_${pole.id}_$index.jpg"
-                    sb.append("          <img src=\"images/$photoName\" width=\"300\" style=\"border-radius:4px; margin-right:8px;\"/>\n")
-                }
-            }
-            sb.append("        </div>\n")
-            sb.append("      ]]></description>\n")
-
-            // ExtendedData
-            sb.append("      <ExtendedData>\n")
-            sb.append("        <Data name=\"segment\"><value>${pole.segmentId}</value></Data>\n")
-            sb.append("        <Data name=\"pole_type\"><value>${pole.type.displayName}</value></Data>\n")
-            sb.append("        <Data name=\"condition\"><value>${pole.condition.displayName}</value></Data>\n")
-            sb.append("        <Data name=\"ownership\"><value>${pole.ownership.displayName}</value></Data>\n")
-            sb.append("        <Data name=\"status\"><value>${pole.status.displayName}</value></Data>\n")
-            sb.append("      </ExtendedData>\n")
-
-            // Coordinates (KML order is longitude,latitude,altitude)
-            sb.append("      <Point>\n")
-            sb.append("        <coordinates>${pole.longitude},${pole.latitude},0</coordinates>\n")
-            sb.append("      </Point>\n")
-            sb.append("    </Placemark>\n\n")
-        }
-
-        sb.append("  </Document>\n")
-        sb.append("</kml>\n")
-        return sb.toString()
-    }
-
-    private fun generateKml(file: File, poles: List<Pole>, segmentName: String, options: ExportOptions, importedRoute: ImportedRoute?) {
-        val content = generateKmlContent(poles, segmentName, options, isKmz = false, importedRoute = importedRoute)
-        file.writeText(content)
-    }
-
-    private fun generateKmz(file: File, poles: List<Pole>, segmentName: String, options: ExportOptions, importedRoute: ImportedRoute?) {
-        val kmlContent = generateKmlContent(poles, segmentName, options, isKmz = true, importedRoute = importedRoute)
-
-        ZipOutputStream(FileOutputStream(file)).use { zip ->
-            // 1. Add doc.kml
-            val kmlEntry = ZipEntry("doc.kml")
-            zip.putNextEntry(kmlEntry)
-            zip.write(kmlContent.toByteArray(Charsets.UTF_8))
-            zip.closeEntry()
-
-            // 2. Add actual photos if file exists, else placeholder
-            for (pole in poles) {
-                if (options.includePhotos && pole.photoPaths.isNotEmpty()) {
-                    pole.photoPaths.forEachIndexed { index, path ->
-                        val photoEntry = ZipEntry("images/photo_${pole.id}_$index.jpg")
-                        zip.putNextEntry(photoEntry)
-                        val photoFile = File(path)
-                        if (photoFile.exists()) {
-                            zip.write(photoFile.readBytes())
-                        } else {
-                            val dummyImageBytes = createDummyJpgBytes(pole.id)
-                            zip.write(dummyImageBytes)
-                        }
-                        zip.closeEntry()
-                    }
-                }
-            }
-        }
-    }
-
     private fun createDummyJpgBytes(poleId: String): ByteArray {
-        val header = "TAG_POLLING_INVENTORY_IMAGE_DATA_FOR_$poleId"
+        val header = "ALPACA_MASTER_IMAGE_DATA_FOR_$poleId"
         return header.toByteArray(Charsets.UTF_8)
     }
 }

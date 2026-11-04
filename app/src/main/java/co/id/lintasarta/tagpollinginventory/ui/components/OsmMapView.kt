@@ -5,25 +5,27 @@ import android.graphics.Color as AndroidColor
 import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.preference.PreferenceManager
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
+import androidx.compose.ui.viewinterop.AndroidView
 import co.id.lintasarta.tagpollinginventory.data.model.ImportedRoute
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
+import co.id.lintasarta.tagpollinginventory.data.model.RouteCoordinate
 import co.id.lintasarta.tagpollinginventory.data.model.TagStatus
 import co.id.lintasarta.tagpollinginventory.location.LocationData
+import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
@@ -40,60 +42,99 @@ fun OsmMapView(
     selectedPoleId: String?,
     userLocation: LocationData?,
     importedRoute: ImportedRoute? = null,
+    segmentCoordinates: List<RouteCoordinate> = emptyList(),
+    segmentName: String = "",
     onPoleClick: (Pole) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
+    val mapView = remember {
         val osmdroidDir = File(context.filesDir, "osmdroid").apply { if (!exists()) mkdirs() }
         val tilesDir = File(osmdroidDir, "tiles").apply { if (!exists()) mkdirs() }
-
         val prefs = PreferenceManager.getDefaultSharedPreferences(context)
         Configuration.getInstance().load(context, prefs)
-        Configuration.getInstance().userAgentValue = "TagPollingInventory/1.0 (Android Field Application)"
+        Configuration.getInstance().userAgentValue = context.packageName
         Configuration.getInstance().osmdroidBasePath = osmdroidDir
         Configuration.getInstance().osmdroidTileCache = tilesDir
-    }
 
-    val mapView = remember {
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
-            setUseDataConnection(true) // Will fallback to local SQLite cache / MBTiles if offline
+            setUseDataConnection(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
             controller.setZoom(16.5)
             isTilesScaledToDpi = true
         }
     }
-    
-    var initialCenterDone by remember { mutableStateOf(false) }
 
-    LaunchedEffect(poles, selectedPoleId, userLocation, importedRoute) {
+    LaunchedEffect(poles, selectedPoleId, userLocation, importedRoute, segmentCoordinates) {
         mapView.overlays.clear()
 
         val allGeoPoints = mutableListOf<GeoPoint>()
 
-        // 1. Draw Imported FO Reference Route Polyline (Amber/Orange)
-        if (importedRoute != null && importedRoute.coordinates.isNotEmpty()) {
-            val routeGeoPoints = importedRoute.coordinates.map { GeoPoint(it.latitude, it.longitude) }
+        // 1. Gather all coordinates for Fiber Optic Route
+        val activeRouteCoords = when {
+            importedRoute != null && importedRoute.coordinates.isNotEmpty() -> importedRoute.coordinates
+            segmentCoordinates.isNotEmpty() -> segmentCoordinates
+            else -> emptyList()
+        }
+
+        if (activeRouteCoords.isNotEmpty()) {
+            val routeGeoPoints = activeRouteCoords.map { GeoPoint(it.latitude, it.longitude) }
             allGeoPoints.addAll(routeGeoPoints)
 
-            val refPolyline = Polyline(mapView).apply {
+            // Draw FO Route Polyline
+            val routePolyline = Polyline(mapView).apply {
                 setPoints(routeGeoPoints)
-                outlinePaint.color = AndroidColor.parseColor("#E65100")
+                outlinePaint.color = AndroidColor.parseColor("#0D47A1") // Bold Telecom Blue
                 outlinePaint.strokeWidth = 14f
             }
-            mapView.overlays.add(refPolyline)
+            mapView.overlays.add(routePolyline)
 
-            // Draw Imported Reference Poles
-            importedRoute.referencePoles.forEach { refPole ->
+            // Start (Origin) Point Marker
+            val startPt = routeGeoPoints.first()
+            val startMarker = Marker(mapView).apply {
+                position = startPt
+                title = "Titik Awal Segmen FO"
+                snippet = segmentName.ifEmpty { "Origin Site" }
+                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                val startShape = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(AndroidColor.parseColor("#2E7D32")) // Green
+                    setStroke(4, AndroidColor.WHITE)
+                    setSize(36, 36)
+                }
+                icon = startShape
+            }
+            mapView.overlays.add(startMarker)
+
+            // End (Destination) Point Marker
+            if (routeGeoPoints.size > 1) {
+                val endPt = routeGeoPoints.last()
+                val endMarker = Marker(mapView).apply {
+                    position = endPt
+                    title = "Titik Akhir Segmen FO"
+                    snippet = segmentName.ifEmpty { "Destination Site" }
+                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    val endShape = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(AndroidColor.parseColor("#D32F2F")) // Red
+                        setStroke(4, AndroidColor.WHITE)
+                        setSize(36, 36)
+                    }
+                    icon = endShape
+                }
+                mapView.overlays.add(endMarker)
+            }
+
+            // Draw Imported Reference Poles if available
+            importedRoute?.referencePoles?.forEach { refPole ->
                 val refMarker = Marker(mapView).apply {
                     position = GeoPoint(refPole.latitude, refPole.longitude)
                     title = "Ref: ${refPole.name}"
-                    snippet = "Imported KML Reference Pole"
+                    snippet = "Titik Referensi Jalur FO"
                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-
                     val shape = GradientDrawable().apply {
                         shape = GradientDrawable.RECTANGLE
                         setColor(AndroidColor.parseColor("#EF6C00"))
@@ -106,7 +147,7 @@ fun OsmMapView(
             }
         }
 
-        // 2. Draw Surveyed Fiber Optic Route Polyline (Blue)
+        // 2. Draw Surveyed Fiber Optic Route Poles
         if (poles.isNotEmpty()) {
             val geoPoints = poles.map { GeoPoint(it.latitude, it.longitude) }
             allGeoPoints.addAll(geoPoints)
@@ -118,7 +159,6 @@ fun OsmMapView(
             }
             mapView.overlays.add(polyline)
 
-            // Add Surveyed Pole Markers
             poles.forEach { pole ->
                 val marker = Marker(mapView).apply {
                     position = GeoPoint(pole.latitude, pole.longitude)
@@ -152,17 +192,17 @@ fun OsmMapView(
         }
 
         // 3. User Real Location Marker
-        if (userLocation != null && userLocation.isAvailable) {
+        if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
             val userPoint = GeoPoint(userLocation.latitude, userLocation.longitude)
             val userMarker = Marker(mapView).apply {
                 position = userPoint
-                title = "Lokasi Saya (${userLocation.providerName})"
+                title = "Lokasi Surveyor (${userLocation.providerName})"
                 snippet = "Akurasi ±${String.format("%.1f", userLocation.accuracy)}m"
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
 
                 val userShape = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(AndroidColor.parseColor("#1976D2"))
+                    setColor(AndroidColor.parseColor("#00ACC1")) // Cyan
                     setStroke(6, AndroidColor.WHITE)
                     setSize(44, 44)
                 }
@@ -171,36 +211,48 @@ fun OsmMapView(
             mapView.overlays.add(userMarker)
         }
 
-        var didCenter = false
-        if (!initialCenterDone && mapView.zoomLevelDouble < 10.0) {
-            if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
-                mapView.controller.setCenter(GeoPoint(userLocation.latitude, userLocation.longitude))
-                mapView.controller.setZoom(18.0)
-                initialCenterDone = true
-                didCenter = true
+        // 4. MAP CENTERING: Always center directly on the segment centroid / bounding box
+        val validRoutePoints = allGeoPoints.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+        if (validRoutePoints.isNotEmpty()) {
+            val minLat = validRoutePoints.minOf { it.latitude }
+            val maxLat = validRoutePoints.maxOf { it.latitude }
+            val minLng = validRoutePoints.minOf { it.longitude }
+            val maxLng = validRoutePoints.maxOf { it.longitude }
+            val centerLat = (minLat + maxLat) / 2.0
+            val centerLng = (minLng + maxLng) / 2.0
+            val centerGeoPoint = GeoPoint(centerLat, centerLng)
+
+            mapView.controller.setCenter(centerGeoPoint)
+
+            val latSpan = maxLat - minLat
+            val lngSpan = maxLng - minLng
+            if (validRoutePoints.size > 1 && (latSpan > 0.0008 || lngSpan > 0.0008)) {
+                val padLat = latSpan.coerceAtLeast(0.005) * 0.2
+                val padLng = lngSpan.coerceAtLeast(0.005) * 0.2
+                val box = BoundingBox(
+                    maxLat + padLat,
+                    maxLng + padLng,
+                    minLat - padLat,
+                    minLng - padLng
+                )
+                mapView.zoomToBoundingBox(box, false, 80)
             } else {
-                val targetPole = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
-                if (targetPole != null && targetPole.latitude != 0.0) {
-                    mapView.controller.setCenter(GeoPoint(targetPole.latitude, targetPole.longitude))
-                    mapView.controller.setZoom(17.0)
-                    initialCenterDone = true
-                    didCenter = true
-                } else {
-                    val validPoints = allGeoPoints.filter { it.latitude != 0.0 && it.longitude != 0.0 }
-                    if (validPoints.isNotEmpty()) {
-                        val box = BoundingBox.fromGeoPoints(validPoints)
-                        mapView.zoomToBoundingBox(box, true, 80)
-                        initialCenterDone = true
-                        didCenter = true
-                    }
-                }
+                mapView.controller.setZoom(16.5)
             }
-            
-            // Fallback to center of Indonesia if no other location is available
-            // but DO NOT set initialCenterDone to true so that when GPS arrives, it can center.
-            if (!didCenter) {
-                mapView.controller.setCenter(GeoPoint(-0.7893, 113.9213))
-                mapView.controller.setZoom(5.0)
+        } else {
+            val targetPole = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
+            if (targetPole != null && targetPole.latitude != 0.0) {
+                mapView.controller.setCenter(GeoPoint(targetPole.latitude, targetPole.longitude))
+                mapView.controller.setZoom(16.5)
+            } else if (userLocation != null && userLocation.isAvailable &&
+                userLocation.latitude in -11.5..6.5 && userLocation.longitude in 95.0..142.0
+            ) {
+                mapView.controller.setCenter(GeoPoint(userLocation.latitude, userLocation.longitude))
+                mapView.controller.setZoom(16.5)
+            } else {
+                // Default fallback: Pusat Operasional Area 18 MPO (Timika, Papua)
+                mapView.controller.setCenter(GeoPoint(-4.76609, 136.76967))
+                mapView.controller.setZoom(15.5)
             }
         }
 
@@ -212,16 +264,28 @@ fun OsmMapView(
             factory = { mapView },
             modifier = Modifier.fillMaxSize()
         )
-        
+
         FloatingActionButton(
             onClick = {
-                if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
-                    mapView.controller.animateTo(GeoPoint(userLocation.latitude, userLocation.longitude), 18.0, 1000L)
+                val validRoutePoints = when {
+                    importedRoute != null && importedRoute.coordinates.isNotEmpty() ->
+                        importedRoute.coordinates.map { GeoPoint(it.latitude, it.longitude) }
+                    segmentCoordinates.isNotEmpty() ->
+                        segmentCoordinates.map { GeoPoint(it.latitude, it.longitude) }
+                    poles.isNotEmpty() ->
+                        poles.map { GeoPoint(it.latitude, it.longitude) }
+                    else -> emptyList()
+                }.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+
+                if (validRoutePoints.isNotEmpty()) {
+                    val centerLat = validRoutePoints.map { it.latitude }.average()
+                    val centerLng = validRoutePoints.map { it.longitude }.average()
+                    mapView.controller.animateTo(GeoPoint(centerLat, centerLng), 16.5, 600L)
+                    Toast.makeText(context, "Peta dipusatkan ke rute segmen", Toast.LENGTH_SHORT).show()
+                } else if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
+                    mapView.controller.animateTo(GeoPoint(userLocation.latitude, userLocation.longitude), 16.5, 600L)
                 } else {
-                    val target = poles.find { it.id == selectedPoleId } ?: poles.firstOrNull()
-                    if (target != null && target.latitude != 0.0) {
-                        mapView.controller.animateTo(GeoPoint(target.latitude, target.longitude), 17.0, 1000L)
-                    }
+                    mapView.controller.animateTo(GeoPoint(-4.76609, 136.76967), 15.5, 600L)
                 }
             },
             modifier = Modifier
@@ -230,7 +294,7 @@ fun OsmMapView(
             containerColor = TelecomPrimary,
             contentColor = Color.White
         ) {
-            Icon(Icons.Default.MyLocation, contentDescription = "Center Map")
+            Icon(Icons.Default.MyLocation, contentDescription = "Pusatkan Peta")
         }
     }
 }

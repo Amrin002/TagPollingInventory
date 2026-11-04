@@ -45,8 +45,8 @@ fun ImportRouteScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Import FO Route",
-                subtitle = "Select KML or KMZ File",
+                title = "Impor Rute Fiber Optic",
+                subtitle = "Pilih File KML atau KMZ",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -69,14 +69,14 @@ fun ImportRouteScreen(
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
-                    text = "Importing route...",
+                    text = "Mengimpor rute...",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = TelecomPrimary
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Parsing KML / KMZ geometry. Please wait.",
+                    text = "Memproses geometri KML / KMZ. Harap tunggu.",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.Gray
                 )
@@ -98,14 +98,14 @@ fun ImportRouteScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Import Route File",
+                            text = "Impor File Rute",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Select a .kml or .kmz FO route file exported from MSFO or GIS software.",
+                            text = "Pilih file rute Fiber Optic berformat .kml atau .kmz yang diekspor dari MSFO atau software GIS.",
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center,
                             color = Color(0xFF37474F)
@@ -132,7 +132,7 @@ fun ImportRouteScreen(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "100% Offline: Files are processed completely on your device without internet connection.",
+                            text = "100% Offline: File diproses sepenuhnya di perangkat Anda tanpa koneksi internet.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.DarkGray
                         )
@@ -156,7 +156,7 @@ fun ImportRouteScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Select KML/KMZ File",
+                        text = "Pilih File KML/KMZ",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )

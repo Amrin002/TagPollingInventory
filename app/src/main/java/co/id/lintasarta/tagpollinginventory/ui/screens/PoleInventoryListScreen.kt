@@ -64,8 +64,8 @@ fun PoleInventoryListScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Local Inventory List",
-                subtitle = "${project.name} (${allPoles.size} Poles Total)",
+                title = "Daftar Inventaris Lokal",
+                subtitle = "${project.name} (Total ${allPoles.size} Tiang)",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -91,15 +91,15 @@ fun PoleInventoryListScreen(
                     Text("$total", fontWeight = FontWeight.Bold)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Completed", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                    Text("Selesai", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
                     Text("$completed", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Conflict", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
+                    Text("Konflik", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
                     Text("$conflict", fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Local Records", style = MaterialTheme.typography.labelSmall, color = TelecomPrimary)
+                    Text("Catatan Lokal", style = MaterialTheme.typography.labelSmall, color = TelecomPrimary)
                     Text("$localRecords", fontWeight = FontWeight.Bold, color = TelecomPrimary)
                 }
             }
@@ -117,7 +117,7 @@ fun PoleInventoryListScreen(
                     value = searchQuery,
                     onValueChange = { viewModel.setPoleSearchQuery(it) },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Search by Pole ID or Tag Number...") },
+                    placeholder = { Text("Cari berdasarkan ID Tiang atau Nomor Tag...") },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp)
@@ -128,10 +128,10 @@ fun PoleInventoryListScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val filterOptions = listOf(
-                        "ALL" to "All",
-                        "COMPLETED" to "Completed",
-                        "CONFLICT" to "Conflict",
-                        "NOT_TAGGED" to "Not Tagged"
+                        "ALL" to "Semua",
+                        "COMPLETED" to "Selesai",
+                        "CONFLICT" to "Konflik",
+                        "NOT_TAGGED" to "Belum Ditag"
                     )
 
                     filterOptions.forEach { (key, label) ->
@@ -186,7 +186,7 @@ fun PoleInventoryListScreen(
                                 )
                                 if (pole.capturedTimestamp.isNotEmpty()) {
                                     Text(
-                                        text = "Saved: ${pole.capturedTimestamp}",
+                                        text = "Disimpan: ${pole.capturedTimestamp}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.DarkGray
                                     )

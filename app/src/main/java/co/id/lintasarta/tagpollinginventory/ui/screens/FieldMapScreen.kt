@@ -3,6 +3,7 @@ package co.id.lintasarta.tagpollinginventory.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Navigation
@@ -20,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.model.DeviationStatus
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
+import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.components.OsmMapView
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
@@ -51,8 +53,8 @@ fun FieldMapScreen(
             ?: project.segments.firstOrNull() 
             ?: Segment(
                 id = "", 
-                name = "No Segment Selected", 
-                route = "N/A", 
+                name = "Tidak Ada Segment Dipilih", 
+                route = "T/A", 
                 startPoint = Pair(0.0, 0.0), 
                 endPoint = Pair(0.0, 0.0), 
                 status = SegmentStatus.NOT_STARTED, 
@@ -60,6 +62,22 @@ fun FieldMapScreen(
                 completedPoles = 0, 
                 conflictPoles = 0
             )
+    }
+
+    LaunchedEffect(activeSegment.id) {
+        if (activeRoute == null && activeSegment.id.isNotEmpty()) {
+            viewModel.selectSegment(activeSegment.id, navigateToDetail = false)
+        }
+    }
+
+    val segmentCoordinates = remember(activeSegment, activeRoute) {
+        if (activeRoute != null && activeRoute!!.coordinates.isNotEmpty()) {
+            activeRoute!!.coordinates
+        } else if (activeSegment.routeCoordinates.isNotEmpty()) {
+            activeSegment.routeCoordinates
+        } else {
+            emptyList()
+        }
     }
 
     val segmentPoles = remember(polesMap, segmentId) {
@@ -85,7 +103,7 @@ fun FieldMapScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Field Map",
+                title = "Peta Lapangan",
                 subtitle = "${activeSegment.name} • ${activeSegment.route}",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
@@ -103,6 +121,8 @@ fun FieldMapScreen(
                 selectedPoleId = targetPoleId,
                 userLocation = realLocation,
                 importedRoute = activeRoute,
+                segmentCoordinates = segmentCoordinates,
+                segmentName = activeSegment.name,
                 onPoleClick = { pole -> viewModel.startTaggingPole(pole.id) }
             )
 
@@ -137,41 +157,53 @@ fun FieldMapScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column {
                                 Text(
-                                    text = if (networkStatus.isOnline) "GPS + Cell/WiFi (${networkStatus.connectionType})" else "GPS: ${realLocation.providerName}",
+                                    text = if (networkStatus.isOnline) "GPS + Seluler/WiFi (${networkStatus.connectionType})" else "GPS: ${realLocation.providerName}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = if (networkStatus.isOnline) Color(0xFF2E7D32) else Color(0xFFEF6C00)
                                 )
                                 Text(
-                                    text = "Accuracy ±${String.format("%.1f", realLocation.accuracy)} m",
+                                    text = "Akurasi ±${String.format("%.1f", realLocation.accuracy)} m",
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
                         }
 
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (networkStatus.isOnline) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)
-                        ) {
-                            Text(
-                                text = if (networkStatus.isOnline) "ONLINE MAP" else "OFFLINE MAP",
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (networkStatus.isOnline) Color(0xFF2E7D32) else TelecomPrimary
-                            )
-                        }
+                        NetworkStatusDot(networkStatus = networkStatus, size = 11.dp)
                     }
                 }
 
-                // Route Deviation HUD Card (if reference route exists)
-                if (activeRoute != null) {
-                    val (devColor, devBg) = when (routeDeviation.status) {
-                        DeviationStatus.NORMAL -> Pair(Color(0xFF2E7D32), Color(0xFFE8F5E9))
-                        DeviationStatus.WARNING -> Pair(Color(0xFFEF6C00), Color(0xFFFFF3E0))
-                        DeviationStatus.CHECK_ROUTE -> Pair(Color(0xFFC62828), Color(0xFFFFEBEE))
+                // Route Deviation HUD Card (for active FO route)
+                val hasRoute = activeRoute != null || segmentCoordinates.isNotEmpty()
+                if (hasRoute) {
+                    val isSimulatedOrFar = routeDeviation.distanceMeters > 50000f || realLocation.latitude !in -11.5..6.5
+                    val devColor = if (isSimulatedOrFar) {
+                        Color(0xFF2E7D32)
+                    } else {
+                        when (routeDeviation.status) {
+                            DeviationStatus.NORMAL -> Color(0xFF2E7D32)
+                            DeviationStatus.WARNING -> Color(0xFFEF6C00)
+                            DeviationStatus.CHECK_ROUTE -> Color(0xFFC62828)
+                        }
                     }
+                    val devBg = if (isSimulatedOrFar) {
+                        Color(0xFFE8F5E9)
+                    } else {
+                        when (routeDeviation.status) {
+                            DeviationStatus.NORMAL -> Color(0xFFE8F5E9)
+                            DeviationStatus.WARNING -> Color(0xFFFFF3E0)
+                            DeviationStatus.CHECK_ROUTE -> Color(0xFFFFEBEE)
+                        }
+                    }
+                    val devIcon = if (isSimulatedOrFar) Icons.Default.CheckCircle else Icons.Default.Navigation
+                    val devTitle = "Rute Fiber Optic: ${activeRoute?.name ?: activeSegment.name}"
+                    val devSubtitle = if (isSimulatedOrFar) {
+                        "Peta difokuskan ke rute segmen Area 18 MPO"
+                    } else {
+                        "Deviasi: ${String.format("%.1f", routeDeviation.distanceMeters)} m dari rute"
+                    }
+                    val devBadge = if (isSimulatedOrFar) "SIAP SURVEI" else routeDeviation.status.displayName
 
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -185,9 +217,12 @@ fun FieldMapScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Icon(
-                                    imageVector = Icons.Default.Navigation,
+                                    imageVector = devIcon,
                                     contentDescription = null,
                                     tint = devColor,
                                     modifier = Modifier.size(18.dp)
@@ -195,24 +230,30 @@ fun FieldMapScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Column {
                                     Text(
-                                        text = "FO Route: ${activeRoute?.name}",
+                                        text = devTitle,
                                         style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "Deviasi: ${String.format("%.1f", routeDeviation.distanceMeters)} m dari rute",
+                                        text = devSubtitle,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = Color.DarkGray
+                                        color = Color.DarkGray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
+
+                            Spacer(modifier = Modifier.width(8.dp))
 
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
                                 color = devBg
                             ) {
                                 Text(
-                                    text = routeDeviation.status.displayName,
+                                    text = devBadge,
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
@@ -239,8 +280,8 @@ fun FieldMapScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     val displayTargetCode = remember(targetPole) {
-                        if (targetPole == null) "No Pole Selected"
-                        else targetPole.poleCode.ifEmpty { "Pole #${targetPole.sequence}" }
+                        if (targetPole == null) "Tidak Ada Tiang Dipilih"
+                        else targetPole.poleCode.ifEmpty { "Tiang #${targetPole.sequence}" }
                     }
 
                     Row(
@@ -261,7 +302,7 @@ fun FieldMapScreen(
                             Spacer(modifier = Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f, fill = false)) {
                                 Text(
-                                    text = "TARGET POLE",
+                                    text = "TIANG TARGET",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.Gray
@@ -295,7 +336,7 @@ fun FieldMapScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Distance: ${String.format(Locale.US, "%.0f", realDistanceMeters)} m",
+                                    text = "Jarak: ${String.format(Locale.US, "%.0f", realDistanceMeters)} m",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFEF6C00)
@@ -310,7 +351,7 @@ fun FieldMapScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "“Stand directly under the pole to capture accurate coordinates.”",
+                            text = "“Berdiri tepat di bawah tiang untuk mengambil koordinat secara akurat.”",
                             modifier = Modifier.padding(10.dp),
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
@@ -334,7 +375,7 @@ fun FieldMapScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Tag This Pole",
+                            text = "Tag Tiang Ini",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )

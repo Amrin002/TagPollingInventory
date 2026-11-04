@@ -6,13 +6,12 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import co.id.lintasarta.tagpollinginventory.data.model.ExportFile
-import co.id.lintasarta.tagpollinginventory.data.model.Pole
-import co.id.lintasarta.tagpollinginventory.data.model.Project
-import co.id.lintasarta.tagpollinginventory.data.model.Segment
+import co.id.lintasarta.tagpollinginventory.data.model.PoleEntity
+import co.id.lintasarta.tagpollinginventory.data.model.SegmentEntity
 
 @Database(
-    entities = [Project::class, Segment::class, Pole::class, ExportFile::class],
-    version = 1,
+    entities = [SegmentEntity::class, PoleEntity::class, ExportFile::class],
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

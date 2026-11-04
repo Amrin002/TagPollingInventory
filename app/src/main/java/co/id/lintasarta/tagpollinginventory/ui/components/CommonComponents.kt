@@ -34,6 +34,26 @@ import co.id.lintasarta.tagpollinginventory.data.model.TagStatus
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.theme.*
 
+@Composable
+fun NetworkStatusDot(
+    networkStatus: NetworkStatus,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 10.dp
+) {
+    val dotColor = when {
+        !networkStatus.isOnline -> Color(0xFFF44336) // Red: Offline
+        networkStatus.connectionType.equals("Cellular", ignoreCase = true) -> Color(0xFFFF9800) // Orange: Online via Seluler
+        else -> Color(0xFF4CAF50) // Green: Online via WiFi / Ethernet
+    }
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(dotColor)
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(
@@ -70,45 +90,22 @@ fun TopBar(
                 IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        contentDescription = "Kembali",
                         tint = Color.White
                     )
                 }
             }
         },
         actions = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Dynamic Online / Offline Pill Indicator
-                val (pillDotColor, pillLabel) = if (networkStatus.isOnline) {
-                    Pair(Color(0xFF4CAF50), "ONLINE (${networkStatus.connectionType})")
-                } else {
-                    Pair(Color(0xFFFF9800), "OFFLINE (Local)")
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color.White.copy(alpha = 0.2f),
-                    modifier = Modifier.padding(end = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(pillDotColor)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = pillLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(end = 16.dp)
+            ) {
+                // Minimalist circular dot indicator (Green=Online, Orange=Cellular, Red=Offline)
+                NetworkStatusDot(
+                    networkStatus = networkStatus,
+                    size = 11.dp
+                )
                 actions()
             }
         },
@@ -129,11 +126,11 @@ fun OfflineStatusCard(
     val statusColor = if (isOnline) Color(0xFF2E7D32) else TelecomOnPrimaryContainer
     val dotColor = if (isOnline) Color(0xFF4CAF50) else Color(0xFF2E7D32)
 
-    val titleText = if (isOnline) "⚡ Online Mode (${networkStatus.connectionType})" else "● Offline Mode (Local Storage)"
+    val titleText = if (isOnline) "⚡ Mode Online (${networkStatus.connectionType})" else "● Mode Offline (Penyimpanan Lokal)"
     val messageText = if (isOnline) {
-        "Connected via ${networkStatus.connectionType}. High precision GPS triangulation & fast tile loading active."
+        "Terhubung melalui ${networkStatus.connectionType}. Triangulasi GPS presisi tinggi & pemuatan tile cepat aktif."
     } else {
-        "Your field survey data is stored safely in local storage with hardware GPS."
+        "Data survei lapangan Anda tersimpan dengan aman di penyimpanan lokal dengan hardware GPS."
     }
 
     Card(
@@ -172,9 +169,9 @@ fun OfflineStatusCard(
 @Composable
 fun TagStatusBadge(status: TagStatus) {
     val (color, bg, text) = when (status) {
-        TagStatus.COMPLETED -> Triple(StatusCompleted, StatusCompletedContainer, "Completed")
-        TagStatus.CONFLICT -> Triple(StatusConflict, StatusConflictContainer, "Conflict")
-        TagStatus.NOT_TAGGED -> Triple(StatusNotTagged, StatusNotTaggedContainer, "Not Tagged")
+        TagStatus.COMPLETED -> Triple(StatusCompleted, StatusCompletedContainer, "Selesai")
+        TagStatus.CONFLICT -> Triple(StatusConflict, StatusConflictContainer, "Konflik")
+        TagStatus.NOT_TAGGED -> Triple(StatusNotTagged, StatusNotTaggedContainer, "Belum Ditag")
     }
 
     Surface(
@@ -206,9 +203,9 @@ fun TagStatusBadge(status: TagStatus) {
 @Composable
 fun SegmentStatusBadge(status: SegmentStatus) {
     val (color, bg, text) = when (status) {
-        SegmentStatus.COMPLETED -> Triple(StatusCompleted, StatusCompletedContainer, "Completed")
-        SegmentStatus.IN_PROGRESS -> Triple(StatusWarning, StatusWarningContainer, "In Progress")
-        SegmentStatus.NOT_STARTED -> Triple(StatusNotTagged, StatusNotTaggedContainer, "Not Started")
+        SegmentStatus.COMPLETED -> Triple(StatusCompleted, StatusCompletedContainer, "Selesai")
+        SegmentStatus.IN_PROGRESS -> Triple(StatusWarning, StatusWarningContainer, "Sedang Berjalan")
+        SegmentStatus.NOT_STARTED -> Triple(StatusNotTagged, StatusNotTaggedContainer, "Belum Dimulai")
     }
 
     Surface(

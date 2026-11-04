@@ -14,3 +14,10 @@
 .cxx
 local.properties
 POLE_INVENTORY_ARCHITECTURE.md
+key.properties
+*.jks
+*.keystore
+
+*.aab
+*.apk
+app/release/

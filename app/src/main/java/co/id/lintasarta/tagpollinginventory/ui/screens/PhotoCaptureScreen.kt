@@ -82,7 +82,7 @@ fun PhotoCaptureScreen(
         },
         onUpdateNotes = { newNotes ->
             viewModel.repository.updateDraftAttributes(
-                type = draftPole?.type ?: PoleType.CONCRETE,
+                type = draftPole?.type ?: PoleType.STEEL,
                 condition = draftPole?.condition ?: PoleCondition.GOOD,
                 ownership = draftPole?.ownership ?: PoleOwnership.LINTASARTA,
                 height = draftPole?.height ?: "9m",
@@ -108,70 +108,70 @@ val photoCategorySpecs = listOf(
     PhotoCategorySpec(
         index = 0,
         title = "1. Pondasi & Lingkungan Tiang",
-        subtitle = "Pole Foundation & Surroundings",
+        subtitle = "Pondasi & Lingkungan Sekitar",
         guideText = "Ambil foto sudut lebar memperlihatkan pondasi tiang & lingkungan sekitarnya.",
         isRequired = true
     ),
     PhotoCategorySpec(
         index = 1,
         title = "2. Label Tag & Nomor Seri",
-        subtitle = "Tag Label & Serial Number",
+        subtitle = "Label Tag & Nomor Seri",
         guideText = "Ambil foto jarak dekat (close-up) membaca teks label/plat merk tiang.",
         isRequired = true
     ),
     PhotoCategorySpec(
         index = 2,
         title = "3. Perangkat Atas / Closure / ODP",
-        subtitle = "Top Closure / ODP / Cables",
+        subtitle = "Closure / ODP / Kabel Atas",
         guideText = "Ambil foto bagian atas tiang memperlihatkan ODP/Closure & kabel FO.",
         isRequired = true
     ),
     PhotoCategorySpec(
         index = 3,
         title = "4. Dokumentasi Tambahan 1 (Opsional)",
-        subtitle = "Optional Documentation 1",
+        subtitle = "Dokumentasi Opsional 1",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     ),
     PhotoCategorySpec(
         index = 4,
         title = "5. Dokumentasi Tambahan 2 (Opsional)",
-        subtitle = "Optional Documentation 2",
+        subtitle = "Dokumentasi Opsional 2",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     ),
     PhotoCategorySpec(
         index = 5,
         title = "6. Dokumentasi Tambahan 3 (Opsional)",
-        subtitle = "Optional Documentation 3",
+        subtitle = "Dokumentasi Opsional 3",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     ),
     PhotoCategorySpec(
         index = 6,
         title = "7. Dokumentasi Tambahan 4 (Opsional)",
-        subtitle = "Optional Documentation 4",
+        subtitle = "Dokumentasi Opsional 4",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     ),
     PhotoCategorySpec(
         index = 7,
         title = "8. Dokumentasi Tambahan 5 (Opsional)",
-        subtitle = "Optional Documentation 5",
+        subtitle = "Dokumentasi Opsional 5",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     ),
     PhotoCategorySpec(
         index = 8,
         title = "9. Dokumentasi Tambahan 6 (Opsional)",
-        subtitle = "Optional Documentation 6",
+        subtitle = "Dokumentasi Opsional 6",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     ),
     PhotoCategorySpec(
         index = 9,
         title = "10. Dokumentasi Tambahan 7 (Opsional)",
-        subtitle = "Optional Documentation 7",
+        subtitle = "Dokumentasi Opsional 7",
         guideText = "Foto tambahan kondisi khusus, potensi bahaya, atau akses lokasi.",
         isRequired = false
     )
@@ -319,7 +319,7 @@ fun PhotoCaptureScreenContent(
             Scaffold(
                 topBar = {
                     TopBar(
-                        title = currentSpec?.title ?: "Take Photo",
+                        title = currentSpec?.title ?: "Ambil Foto",
                         subtitle = displayPoleCode,
                         onBackClick = { activeCameraSlotIndex = null },
                         networkStatus = networkStatus
@@ -542,7 +542,7 @@ fun PhotoCaptureScreenContent(
             Scaffold(
                 topBar = {
                     TopBar(
-                        title = "Capture Pole Photos",
+                        title = "Ambil Foto Tiang",
                         subtitle = displayPoleCode,
                         onBackClick = onBackClick,
                         networkStatus = networkStatus
@@ -770,7 +770,7 @@ fun PhotoCaptureScreenContent(
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Text(
-                            text = if (isRequiredComplete) "Selesai & Lanjut ke Review" else "Lengkapi 3 Foto Wajib",
+                            text = if (isRequiredComplete) "Selesai & Lanjut ke Tinjauan" else "Lengkapi 3 Foto Wajib",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )

@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.CheckCircle
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.FieldMapCanvas
@@ -45,8 +47,8 @@ fun SegmentDetailScreen(
             ?: project.segments.firstOrNull() 
             ?: Segment(
                 id = "", 
-                name = "No Segment Selected", 
-                route = "N/A", 
+                name = "Tidak Ada Segment Dipilih", 
+                route = "T/A", 
                 startPoint = Pair(0.0, 0.0), 
                 endPoint = Pair(0.0, 0.0), 
                 status = SegmentStatus.NOT_STARTED, 
@@ -65,19 +67,19 @@ fun SegmentDetailScreen(
     if (showCompleteDialog) {
         AlertDialog(
             onDismissRequest = { showCompleteDialog = false },
-            title = { Text("Complete Segment?") },
-            text = { Text("You have surveyed ${activeSegment.completedPoles} poles.\nThe segment will be marked as completed.") },
+            title = { Text("Selesaikan Segment?") },
+            text = { Text("Anda telah mensurvei ${activeSegment.completedPoles} tiang.\nSegment akan ditandai sebagai selesai.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.markActiveSegmentCompleted()
                     showCompleteDialog = false
                 }) {
-                    Text("COMPLETE SEGMENT")
+                    Text("SELESAIKAN SEGMENT")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCompleteDialog = false }) {
-                    Text("CANCEL")
+                    Text("BATAL")
                 }
             }
         )
@@ -87,7 +89,7 @@ fun SegmentDetailScreen(
         topBar = {
             TopBar(
                 title = activeSegment.name,
-                subtitle = if (activeSegment.route.isNotEmpty() && activeSegment.route != "N/A") activeSegment.route else "No reference route",
+                subtitle = if (activeSegment.route.isNotEmpty() && activeSegment.route != "N/A" && activeSegment.route != "T/A") activeSegment.route else "Tidak ada rute referensi",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -113,15 +115,15 @@ fun SegmentDetailScreen(
                     Text("${activeSegment.totalPoles}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Completed", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                    Text("Selesai", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
                     Text("${activeSegment.completedPoles}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = Color(0xFF2E7D32))
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Remaining", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text("Tersisa", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                     Text("${activeSegment.totalPoles - activeSegment.completedPoles}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Conflict", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
+                    Text("Konflik", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
                     Text("${activeSegment.conflictPoles}", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium, color = Color(0xFFC62828))
                 }
             }
@@ -141,52 +143,82 @@ fun SegmentDetailScreen(
                 )
             }
 
-            // Primary Start Tagging Action Bar
+            // Primary Action Bar: Dual Survey Modes (Quick Tagging vs Tag Polling PM)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.White,
                 shadowElevation = 4.dp
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (targetPoleId.isNotEmpty()) "Target Pole: $targetPoleId" else "Belum Ada Tiang",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = TelecomPrimary
-                        )
-                        Text(
-                            text = if (targetPoleId.isNotEmpty()) "Stand under pole to capture GPS" else "Tambah tiang baru untuk survey rute ini",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
-                    }
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = if (targetPoleId.isNotEmpty()) "Target Tiang: $targetPoleId" else "Pilih Mode Survei untuk Segment Ini:",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TelecomPrimary
+                    )
+                    Text(
+                        text = if (targetPoleId.isNotEmpty()) "Lanjutkan survei tiang target dengan salah satu mode di bawah:" else "Mulai pengambilan data tiang baru:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
 
-                    Button(
-                        onClick = {
-                            if (targetPoleId.isNotEmpty()) {
-                                onStartTagging(targetPoleId)
-                            } else {
-                                viewModel.createAndStartNewPole(activeSegment.id)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
-                        shape = RoundedCornerShape(10.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Icon(
-                            imageVector = if (targetPoleId.isNotEmpty()) Icons.Default.PlayArrow else Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (targetPoleId.isNotEmpty()) "Start Tagging" else "Tambah Tiang",
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Mode 1: Quick Tagging
+                        Button(
+                            onClick = {
+                                viewModel.startQuickTaggingForSegment(activeSegment.id)
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Quick Tagging",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
+
+                        // Mode 2: Tag Polling PM
+                        Button(
+                            onClick = {
+                                if (targetPoleId.isNotEmpty()) {
+                                    onStartTagging(targetPoleId)
+                                } else {
+                                    viewModel.startPmSurveyForSegment(activeSegment.id)
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (targetPoleId.isNotEmpty()) Icons.Default.PlayArrow else Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Tag Polling PM",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp
+                            )
+                        }
                     }
                 }
             }
@@ -210,7 +242,7 @@ fun SegmentDetailScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Klik tombol 'Tambah Tiang' di atas untuk mulai melakukan survey dan tagging tiang baru pada segmen ini.",
+                            text = "Klik tombol 'Tambah Tiang' di atas untuk mulai melakukan survei dan tagging tiang baru pada segment ini.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray,
                             textAlign = TextAlign.Center
@@ -232,7 +264,7 @@ fun SegmentDetailScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "POLES IN THIS SEGMENT",
+                                text = "TIANG PADA SEGMENT INI",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF546E7A)
@@ -255,7 +287,7 @@ fun SegmentDetailScreen(
                             ) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("MARK SEGMENT AS COMPLETED", fontWeight = FontWeight.Bold)
+                                Text("TANDAI SEGMENT SEBAGAI SELESAI", fontWeight = FontWeight.Bold)
                             }
                         }
                     }

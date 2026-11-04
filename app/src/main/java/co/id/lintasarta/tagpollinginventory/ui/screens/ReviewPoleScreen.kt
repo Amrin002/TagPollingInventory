@@ -42,7 +42,7 @@ fun ReviewPoleScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Review Pole Data",
+                title = "Tinjau Data Tiang",
                 subtitle = displayPoleCode,
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
@@ -74,7 +74,7 @@ fun ReviewPoleScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "LOCKED LOCATION",
+                            text = "LOKASI TERKUNCI",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
@@ -95,7 +95,7 @@ fun ReviewPoleScreen(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Coordinates Captured & Locked",
+                                    text = "Koordinat Berhasil Diambil & Dikunci",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF2E7D32)
@@ -111,7 +111,7 @@ fun ReviewPoleScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Latitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Lintang", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(
                                 text = String.format(Locale.US, "%.6f°", draftPole?.latitude ?: 0.0),
                                 fontWeight = FontWeight.Bold,
@@ -119,7 +119,7 @@ fun ReviewPoleScreen(
                             )
                         }
                         Column {
-                            Text("Longitude", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Bujur", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(
                                 text = String.format(Locale.US, "%.6f°", draftPole?.longitude ?: 0.0),
                                 fontWeight = FontWeight.Bold,
@@ -127,7 +127,7 @@ fun ReviewPoleScreen(
                             )
                         }
                         Column {
-                            Text("GPS Accuracy", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Akurasi GPS", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(
                                 text = String.format(Locale.US, "±%.1fm", draftPole?.accuracy ?: 2.8f),
                                 fontWeight = FontWeight.Bold,
@@ -137,7 +137,7 @@ fun ReviewPoleScreen(
                     }
 
                     Text(
-                        text = "Captured Timestamp: ${draftPole?.capturedTimestamp?.ifEmpty { "Just now" } ?: "Just now"}",
+                        text = "Waktu Pengambilan: ${draftPole?.capturedTimestamp?.ifEmpty { "Baru saja" } ?: "Baru saja"}",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Medium,
                         color = Color.DarkGray
@@ -156,7 +156,7 @@ fun ReviewPoleScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "POLE DETAILS",
+                        text = "DETAIL TIANG",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = TelecomPrimary
@@ -169,15 +169,15 @@ fun ReviewPoleScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Type", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Jenis", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.type?.displayName ?: "Concrete", fontWeight = FontWeight.Bold)
                         }
                         Column {
-                            Text("Condition", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Kondisi", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.condition?.displayName ?: "Good", fontWeight = FontWeight.Bold)
                         }
                         Column {
-                            Text("Ownership", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Kepemilikan", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.ownership?.displayName ?: "Lintasarta", fontWeight = FontWeight.Bold)
                         }
                     }
@@ -187,11 +187,11 @@ fun ReviewPoleScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("Height", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Tinggi", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.height ?: "9m", fontWeight = FontWeight.Bold)
                         }
                         Column {
-                            Text("Tag Number", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Nomor Tag", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.tagNumber ?: "TAG-LTA-019", fontWeight = FontWeight.Bold)
                         }
                     }
@@ -209,7 +209,7 @@ fun ReviewPoleScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "FO CABLE & EQUIPMENT",
+                        text = "KABEL FO & PERALATAN",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = TelecomPrimary
@@ -222,17 +222,17 @@ fun ReviewPoleScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column {
-                            Text("FO Cable Present", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            Text(if (draftPole?.hasFoCable != false) "Yes" else "No", fontWeight = FontWeight.Bold)
+                            Text("Kabel Fiber Optic Tersedia", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text(if (draftPole?.hasFoCable != false) "Ya" else "Tidak", fontWeight = FontWeight.Bold)
                         }
                         Column {
-                            Text("Cable Condition", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Kondisi Kabel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.cableCondition?.displayName ?: "Good", fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Column {
-                        Text("Equipment Installed", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Peralatan Terpasang", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(
                             text = draftPole?.equipment?.joinToString(", ") ?: "ODP, Closure",
                             fontWeight = FontWeight.Bold
@@ -241,7 +241,7 @@ fun ReviewPoleScreen(
 
                     if (!draftPole?.notes.isNullOrEmpty()) {
                         Column {
-                            Text("Notes", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Catatan", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(draftPole?.notes ?: "", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
@@ -268,7 +268,7 @@ fun ReviewPoleScreen(
                         Column {
                             val photoCount = draftPole?.photoPaths?.size ?: 0
                             Text(
-                                text = "✓ $photoCount Photos Attached",
+                                text = "✓ $photoCount Foto Terlampir",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32)
@@ -288,7 +288,7 @@ fun ReviewPoleScreen(
                                 if (file.exists()) {
                                     AsyncImage(
                                         model = file,
-                                        contentDescription = "Pole Photo Preview",
+                                        contentDescription = "Pratinjau Foto Tiang",
                                         modifier = Modifier
                                             .width(200.dp)
                                             .height(180.dp)
@@ -323,7 +323,7 @@ fun ReviewPoleScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "SAVE POLE LOCALLY",
+                    text = "SIMPAN TIANG SECARA LOKAL",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )

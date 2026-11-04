@@ -55,7 +55,7 @@ fun ExportProgressScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = if (isExporting) "Exporting Inventory..." else "Export Status",
+                title = if (isExporting) "Mengekspor Inventaris..." else "Status Ekspor",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -81,7 +81,7 @@ fun ExportProgressScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Text(
-                    text = "Preparing Export…",
+                    text = "Menyiapkan Ekspor…",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = TelecomPrimary
@@ -110,10 +110,10 @@ fun ExportProgressScreen(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        ExportStepRow("Read records from local database", completed = progressStep >= 1)
-                        ExportStepRow("Generate GPS coordinates & bounding box", completed = progressStep >= 2)
-                        ExportStepRow("Generate attributes & extended KML metadata", completed = progressStep >= 3)
-                        ExportStepRow("Package photos & compress output file", completed = progressStep >= 4)
+                        ExportStepRow("Membaca catatan dari database lokal", completed = progressStep >= 1)
+                        ExportStepRow("Membuat koordinat GPS & bounding box", completed = progressStep >= 2)
+                        ExportStepRow("Membuat atribut & metadata KML diperluas", completed = progressStep >= 3)
+                        ExportStepRow("Mengemas foto & mengompres file output", completed = progressStep >= 4)
                     }
                 }
             } else {
@@ -144,7 +144,7 @@ fun ExportProgressScreen(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "✓ Export Completed",
+                    text = "✓ Ekspor Selesai",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF2E7D32)
@@ -163,7 +163,7 @@ fun ExportProgressScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "FILE GENERATED",
+                            text = "FILE YANG DIHASILKAN",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.Gray
@@ -182,9 +182,9 @@ fun ExportProgressScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Format: ${lastGenerated?.format?.name ?: "KMZ"}", style = MaterialTheme.typography.bodySmall)
-                            Text("Records: ${lastGenerated?.recordCount ?: 18}", style = MaterialTheme.typography.bodySmall)
+                            Text("Catatan: ${lastGenerated?.recordCount ?: 18}", style = MaterialTheme.typography.bodySmall)
                             Text(
-                                text = "Size: " + String.format("%.1f MB", (lastGenerated?.sizeBytes ?: 8808000) / (1024.0 * 1024.0)),
+                                text = "Ukuran: " + String.format("%.1f MB", (lastGenerated?.sizeBytes ?: 8808000) / (1024.0 * 1024.0)),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF2E7D32)
@@ -214,10 +214,10 @@ fun ExportProgressScreen(
                                     }
                                     putExtra(Intent.EXTRA_STREAM, uri)
                                     putExtra(Intent.EXTRA_SUBJECT, exportFile.fileName)
-                                    putExtra(Intent.EXTRA_TEXT, "Exported Pole Inventory data: ${exportFile.fileName}")
+                                    putExtra(Intent.EXTRA_TEXT, "Data Inventaris Tiang Diekspor: ${exportFile.fileName}")
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Share Export File"))
+                                context.startActivity(Intent.createChooser(shareIntent, "Bagikan File Ekspor"))
                             }
                         }
                     },
@@ -234,7 +234,7 @@ fun ExportProgressScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Share File",
+                        text = "Bagikan File",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -256,7 +256,7 @@ fun ExportProgressScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Open File Management",
+                        text = "Buka Manajemen File",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )

@@ -53,8 +53,8 @@ fun ImportPreviewScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Import Route Preview",
-                subtitle = previewData?.fileName ?: "File Preview",
+                title = "Pratinjau Impor Rute",
+                subtitle = previewData?.fileName ?: "Pratinjau File",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -81,7 +81,7 @@ fun ImportPreviewScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "ROUTE METADATA",
+                            text = "METADATA RUTE",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
@@ -91,7 +91,7 @@ fun ImportPreviewScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("File Name", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Nama File", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(previewData?.fileName ?: "", fontWeight = FontWeight.Bold)
                         }
 
@@ -107,7 +107,7 @@ fun ImportPreviewScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Route Name", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Nama Rute", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(previewData?.routeName ?: "", fontWeight = FontWeight.Bold)
                         }
 
@@ -118,12 +118,12 @@ fun ImportPreviewScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text("LineString Points", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                Text("${previewData?.coordinateCount ?: 0} coordinates", fontWeight = FontWeight.Bold)
+                                Text("Titik LineString", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                Text("${previewData?.coordinateCount ?: 0} koordinat", fontWeight = FontWeight.Bold)
                             }
                             Column {
-                                Text("Reference Poles", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                                Text("${previewData?.referencePoleCount ?: 0} poles", fontWeight = FontWeight.Bold)
+                                Text("Tiang Referensi", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                Text("${previewData?.referencePoleCount ?: 0} tiang", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -140,7 +140,7 @@ fun ImportPreviewScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "ASSIGN TO PROJECT / SEGMENT",
+                            text = "TUGASKAN KE PROYEK / SEGMENT",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
@@ -149,7 +149,7 @@ fun ImportPreviewScreen(
                         OutlinedTextField(
                             value = customProjectName,
                             onValueChange = { customProjectName = it },
-                            label = { Text("Project Name") },
+                            label = { Text("Nama Proyek") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(8.dp)
@@ -158,7 +158,7 @@ fun ImportPreviewScreen(
                         OutlinedTextField(
                             value = customSegmentName,
                             onValueChange = { customSegmentName = it },
-                            label = { Text("Segment Name") },
+                            label = { Text("Nama Segment") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(8.dp)
@@ -166,7 +166,7 @@ fun ImportPreviewScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Pole Naming Configuration (Otomatis)",
+                            text = "Konfigurasi Penamaan Tiang (Otomatis)",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = TelecomPrimary
@@ -190,7 +190,7 @@ fun ImportPreviewScreen(
                                     cityCode = it.take(3).uppercase()
                                     userEditedCityCode = true
                                 },
-                                label = { Text("City Code (Auto/3 chars)") },
+                                label = { Text("Kode Kota (Otomatis/3 Karakter)") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -200,7 +200,7 @@ fun ImportPreviewScreen(
                                     locationCode = it.take(3).uppercase()
                                     userEditedLocCode = true
                                 },
-                                label = { Text("Loc Code (Auto/3 chars)") },
+                                label = { Text("Kode Lokasi (Otomatis/3 Karakter)") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -209,7 +209,7 @@ fun ImportPreviewScreen(
                         OutlinedTextField(
                             value = startingSequence,
                             onValueChange = { if (it.all { char -> char.isDigit() }) startingSequence = it },
-                            label = { Text("Starting Sequence (e.g. 1)") },
+                            label = { Text("Nomor Urut Awal (Cth. 1)") },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true
                         )
@@ -224,7 +224,7 @@ fun ImportPreviewScreen(
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Text(
-                                    text = "Otomatis Format Kode Tiang (Architecture Sec. 9):",
+                                    text = "Format Kode Tiang Otomatis (Architecture Sec. 9):",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = TelecomPrimary,
                                     fontWeight = FontWeight.Bold
@@ -258,7 +258,7 @@ fun ImportPreviewScreen(
                             .height(52.dp),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Cancel")
+                        Text("Batal")
                     }
 
                     Button(
@@ -275,7 +275,7 @@ fun ImportPreviewScreen(
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null)
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Confirm Import", fontWeight = FontWeight.Bold)
+                        Text("Konfirmasi Impor", fontWeight = FontWeight.Bold)
                     }
                 }
             } else {
@@ -297,14 +297,14 @@ fun ImportPreviewScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Unable to import route",
+                            text = "Tidak dapat mengimpor rute",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFC62828)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "The selected KML/KMZ does not contain supported LineString or Point geometry.",
+                            text = "File KML/KMZ yang dipilih tidak mengandung geometri LineString atau Point yang didukung.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF37474F)
                         )
@@ -321,7 +321,7 @@ fun ImportPreviewScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Try Another File", fontWeight = FontWeight.Bold)
+                    Text("Coba File Lain", fontWeight = FontWeight.Bold)
                 }
             }
         }

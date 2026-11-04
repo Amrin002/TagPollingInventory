@@ -37,8 +37,8 @@ fun FileManagementScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Export File History",
-                subtitle = "${exportFiles.size} Saved Files",
+                title = "Riwayat File Ekspor",
+                subtitle = "${exportFiles.size} File Tersimpan",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -64,7 +64,7 @@ fun FileManagementScreen(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No export files generated yet.",
+                            text = "Belum ada file ekspor yang dibuat.",
                             style = MaterialTheme.typography.titleMedium,
                             color = Color.Gray
                         )
@@ -97,10 +97,10 @@ fun FileManagementScreen(
                                         }
                                         putExtra(Intent.EXTRA_STREAM, uri)
                                         putExtra(Intent.EXTRA_SUBJECT, file.fileName)
-                                        putExtra(Intent.EXTRA_TEXT, "Export File: ${file.fileName}")
+                                        putExtra(Intent.EXTRA_TEXT, "File Ekspor: ${file.fileName}")
                                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                     }
-                                    context.startActivity(Intent.createChooser(shareIntent, "Share File"))
+                                    context.startActivity(Intent.createChooser(shareIntent, "Bagikan File"))
                                 }
                             },
                             onDelete = { viewModel.deleteExportFile(file.id) }
@@ -168,7 +168,7 @@ fun ExportFileCard(
                         color = TelecomPrimary
                     )
                     Text(
-                        text = "${file.createdAt} • ${file.recordCount} records",
+                        text = "${file.createdAt} • ${file.recordCount} catatan",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )

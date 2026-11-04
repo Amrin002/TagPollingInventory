@@ -5,6 +5,7 @@ import android.util.Log
 import co.id.lintasarta.tagpollinginventory.data.local.AppDatabase
 import co.id.lintasarta.tagpollinginventory.data.model.*
 import co.id.lintasarta.tagpollinginventory.ui.screens.deriveCodesFromSegmentName
+import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,100 +20,223 @@ import java.util.*
 class InventoryRepository(private val context: Context) {
 
     private val db = AppDatabase.getDatabase(context)
-    private val dao = db.inventoryDao()
+    val dao = db.inventoryDao()
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Legacy JSON file reference (used only for cleanup/migration if needed)
+    // Legacy JSON file reference (deleted on launch if present)
     private val oldDataFile = File(context.filesDir, "inventory_data.json")
 
     private val _project = MutableStateFlow(createInitialProject())
     val project: StateFlow<Project> = _project.asStateFlow()
 
-    private val _selectedSegmentId = MutableStateFlow("SEG-19")
+    private val _selectedSegmentId = MutableStateFlow("SEG-2")
     val selectedSegmentId: StateFlow<String> = _selectedSegmentId.asStateFlow()
 
     private val _targetPoleId = MutableStateFlow("")
     val targetPoleId: StateFlow<String> = _targetPoleId.asStateFlow()
 
-    private val _poles = MutableStateFlow<Map<String, Pole>>(emptyMap())
-    val poles: StateFlow<Map<String, Pole>> = _poles.asStateFlow()
+    private val _poles = MutableStateFlow<Map<String, PoleEntity>>(emptyMap())
+    val poles: StateFlow<Map<String, PoleEntity>> = _poles.asStateFlow()
 
     private val _exportFiles = MutableStateFlow<List<ExportFile>>(emptyList())
     val exportFiles: StateFlow<List<ExportFile>> = _exportFiles.asStateFlow()
 
-    private val _currentDraftPole = MutableStateFlow<Pole?>(null)
-    val currentDraftPole: StateFlow<Pole?> = _currentDraftPole.asStateFlow()
+    private val _currentDraftPole = MutableStateFlow<PoleEntity?>(null)
+    val currentDraftPole: StateFlow<PoleEntity?> = _currentDraftPole.asStateFlow()
 
     init {
-        // Migration: If JSON exists but DB is empty, we could migrate. 
-        // For simplicity, we just delete the old JSON file now that we use Room.
         if (oldDataFile.exists()) {
             oldDataFile.delete()
         }
 
-        // Start observing Room Database
+        // Observasi daftar Segmen dari SQLite Room
         scope.launch {
-            dao.getProjectFlow().collect { proj ->
-                if (proj != null) {
-                    _project.value = _project.value.copy(
-                        id = proj.id,
-                        name = proj.name,
-                        location = proj.location,
-                        totalPoles = proj.totalPoles,
-                        completedPoles = proj.completedPoles,
-                        conflictPoles = proj.conflictPoles,
-                        uncompletedPoles = proj.uncompletedPoles
-                    )
-                } else {
-                    // Initialize empty project in DB
-                    dao.insertProject(createInitialProject())
+            dao.getAllSegmentsFlow().collect { segs ->
+                val p = _project.value
+                val totalPoles = segs.sumOf { it.totalPoles }
+                val completedPoles = segs.sumOf { it.completedPoles }
+                val conflictPoles = segs.sumOf { it.conflictPoles }
+                _project.value = p.copy(
+                    segments = segs,
+                    totalPoles = totalPoles,
+                    completedPoles = completedPoles,
+                    conflictPoles = conflictPoles,
+                    uncompletedPoles = (totalPoles - completedPoles).coerceAtLeast(0)
+                )
+
+                if (_selectedSegmentId.value.isEmpty() && segs.isNotEmpty()) {
+                    _selectedSegmentId.value = segs.first().id
                 }
             }
         }
 
-        scope.launch {
-            dao.getAllSegmentsFlow().collect { segs ->
-                val p = _project.value
-                _project.value = p.copy(segments = segs)
-            }
-        }
-
+        // Observasi seluruh tiang dari SQLite Room
         scope.launch {
             dao.getAllPolesFlow().collect { poleList ->
                 _poles.value = poleList.associateBy { it.id }
+                recalculateProjectStats()
             }
         }
 
+        // Observasi file export
         scope.launch {
             dao.getAllExportFilesFlow().collect { files ->
                 _exportFiles.value = files
             }
         }
+
+        // Auto-seed 143 segmen MPO jika tabel segments di Room masih kosong
+        scope.launch {
+            val existingSegments = dao.getAllSegmentsSync()
+            if (existingSegments.isEmpty()) {
+                seedMpoSegments()
+            }
+        }
+    }
+
+    /**
+     * Membaca dan menanam (seed) 143 segmen MPO dari assets/mpo_segments.json ke database Room
+     */
+    fun seedMpoSegments(forceReload: Boolean = false) {
+        scope.launch {
+            val current = dao.getAllSegmentsSync()
+            if (current.isNotEmpty() && !forceReload) return@launch
+
+            val bundledDtos = RnimsApiClient.loadBundledMpoSegments(context)
+            if (bundledDtos.isEmpty()) return@launch
+
+            val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+            val seededSegments = bundledDtos.map { dto ->
+                val coords = dto.route_path?.map {
+                    RouteCoordinate(longitude = it.lng, latitude = it.lat)
+                } ?: emptyList()
+
+                val cityCode = dto.org_site?.take(3)?.uppercase() ?: "TMK"
+                val locationCode = dto.dst_site?.take(3)?.uppercase() ?: "PMK"
+                val cityFilter = determineCityFilterKey(dto.org_city, dto.dst_city, dto.org_site)
+                val priorityKey = determinePriorityRouteKey(dto.segment_name, dto.org_site, dto.dst_site)
+
+                SegmentEntity(
+                    id = "SEG-${dto.id}",
+                    name = dto.segment_name,
+                    lengthMeters = dto.distance,
+                    routeCoordinates = coords,
+                    areaId = dto.area_id,
+                    orgSite = dto.org_site ?: "",
+                    dstSite = dto.dst_site ?: "",
+                    orgCity = dto.org_city ?: "",
+                    dstCity = dto.dst_city ?: "",
+                    cityFilterKey = cityFilter,
+                    isAlpacaProject = true,
+                    priorityRouteKey = priorityKey,
+                    poId = "PO-MPO-${dto.id}",
+                    status = SegmentStatus.NOT_STARTED,
+                    totalPoles = 0,
+                    completedPoles = 0,
+                    conflictPoles = 0,
+                    isPinned = false,
+                    cityCode = cityCode,
+                    locationCode = locationCode,
+                    currentSequence = 0,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+
+            dao.insertSegments(seededSegments)
+
+            val initialProject = Project(
+                id = "PRJ-MPO-ALPACA",
+                name = "Alpaca PRA - Regional Fiber Optic Survey",
+                location = "Area 18 Maluku Papua Operation",
+                totalPoles = 0,
+                completedPoles = 0,
+                conflictPoles = 0,
+                uncompletedPoles = 0,
+                totalP7 = 0,
+                totalP9 = 0,
+                segments = seededSegments
+            )
+            _project.value = initialProject
+
+            if (_selectedSegmentId.value.isEmpty() || _selectedSegmentId.value == "SEG-19") {
+                seededSegments.firstOrNull()?.let { firstSeg ->
+                    _selectedSegmentId.value = firstSeg.id
+                }
+            }
+        }
+    }
+
+    private fun determinePriorityRouteKey(name: String, orgSite: String?, dstSite: String?): String {
+        val text = "$name ${orgSite.orEmpty()} ${dstSite.orEmpty()}".lowercase(Locale.ROOT)
+        return when {
+            text.contains("sentani") || text.contains("abepura") -> "SENTANI_ABEPURA"
+            text.contains("manokwari") || text.contains("mkw") || text.contains("mnk") -> "MANOKWARI"
+            text.contains("timika") || text.contains("tmk") || text.contains("mimika") -> "TIMIKA"
+            text.contains("sorong") || text.contains("srg") || text.contains("soq") -> "SORONG"
+            text.contains("dobo") || text.contains("dbo") -> "DOBO"
+            text.contains("tiakur") || text.contains("tkr") -> "TIAKUR"
+            else -> ""
+        }
+    }
+
+    private fun determineCityFilterKey(orgCity: String?, dstCity: String?, orgSite: String?): String {
+        val text = "${orgCity.orEmpty()} ${dstCity.orEmpty()} ${orgSite.orEmpty()}".lowercase(Locale.ROOT)
+        return when {
+            text.contains("mimika") || text.contains("timika") || text.contains("tmk") -> "Timika"
+            text.contains("sorong") || text.contains("srg") || text.contains("soq") -> "Sorong"
+            text.contains("jayapura") || text.contains("sentani") || text.contains("abepura") || text.contains("jyp") || text.contains("djj") -> "Jayapura"
+            text.contains("ambon") || text.contains("amb") -> "Ambon"
+            text.contains("merauke") || text.contains("mrk") || text.contains("mkq") -> "Merauke"
+            text.contains("manokwari") || text.contains("mwr") || text.contains("mkw") -> "Manokwari"
+            text.contains("biak") || text.contains("bik") -> "Biak"
+            text.contains("nabire") || text.contains("nbr") -> "Nabire"
+            text.contains("tual") -> "Tual"
+            text.contains("dobo") || text.contains("dbo") -> "Dobo"
+            text.contains("tiakur") || text.contains("tkr") -> "Tiakur"
+            else -> "Lainnya"
+        }
     }
 
     private fun createInitialProject(): Project {
         return Project(
-            id = "PRJ-AMB-01",
-            name = "Project Utama",
-            location = "Lokasi Kerja",
+            id = "PRJ-MPO-ALPACA",
+            name = "Alpaca PRA - Regional Fiber Optic Survey",
+            location = "Area 18 Maluku Papua Operation",
             totalPoles = 0,
             completedPoles = 0,
             conflictPoles = 0,
             uncompletedPoles = 0,
+            totalP7 = 0,
+            totalP9 = 0,
             segments = emptyList()
         )
     }
 
     fun saveData() {
-        // No-op for direct callers since Room auto-persists on insert/update.
-        // We only explicitly persist project stats recalculation here if needed,
-        // but recalculateProjectStats already saves to Room.
+        // Room auto-persists in real-time
     }
 
-    fun addSegment(segment: Segment) {
+    fun addSegment(segment: SegmentEntity) {
+        val currentProj = _project.value
+        if (currentProj.segments.none { it.id == segment.id }) {
+            _project.value = currentProj.copy(segments = currentProj.segments + segment)
+        }
         scope.launch {
             dao.insertSegment(segment)
             recalculateProjectStats()
+        }
+    }
+
+    fun togglePinSegment(segmentId: String) {
+        scope.launch {
+            val seg = dao.getSegmentById(segmentId) ?: return@launch
+            val newPinned = !seg.isPinned
+            dao.updateSegmentPin(segmentId, newPinned)
+            val updatedList = _project.value.segments.map {
+                if (it.id == segmentId) it.copy(isPinned = newPinned) else it
+            }.sortedWith(compareByDescending<SegmentEntity> { it.isPinned }.thenBy { it.id })
+            _project.value = _project.value.copy(segments = updatedList)
         }
     }
 
@@ -129,14 +253,11 @@ class InventoryRepository(private val context: Context) {
             try {
                 dao.deletePolesBySegmentIds(segmentIds)
                 dao.deleteSegments(segmentIds)
-                
-                Log.d("DeleteTrace", "[Repository] SQLite deletion completed, recalculating stats")
-                
-                // Immediately update local _project flow so UI recomposes
+
                 val currentProj = _project.value
                 val remainingSegments = currentProj.segments.filter { it.id !in segmentIds }
                 _project.value = currentProj.copy(segments = remainingSegments)
-                
+
                 recalculateProjectStats()
                 Log.d("DeleteTrace", "[Repository] Deletion fully processed")
             } catch (e: Exception) {
@@ -172,24 +293,43 @@ class InventoryRepository(private val context: Context) {
         }
     }
 
-    fun createNewPoleInSegment(segmentId: String, currentLat: Double, currentLng: Double): Pole {
+    /**
+     * Membuat Tiang Baru Sesuai Standar Alpaca PRA:
+     * - assetUid: POL-MPO-[KOTA]-[SEQ:04d]
+     * - assetClass: pole_7 / pole_9
+     * - rawLatitude / rawLongitude tersimpan untuk pembuktian GNSS
+     */
+    fun createNewPoleInSegment(
+        segmentId: String,
+        currentLat: Double,
+        currentLng: Double,
+        assetClass: String = "pole_9"
+    ): PoleEntity {
         val segment = _project.value.segments.find { it.id == segmentId }
         val (autoCity, autoLoc) = deriveCodesFromSegmentName(segment?.name ?: "")
         val cityCode = segment?.cityCode?.takeIf { it.isNotBlank() } ?: autoCity
         val locationCode = segment?.locationCode?.takeIf { it.isNotBlank() } ?: autoLoc
 
         val polesInSeg = _poles.value.values.filter { it.segmentId == segmentId }
-        val maxSeqFromPoles = polesInSeg.maxOfOrNull { it.sequence } ?: 0
-        val segmentSeq = segment?.currentSequence ?: 0
-        val nextSeq = maxOf(maxSeqFromPoles, segmentSeq) + 1
+        val nextSeq = if (polesInSeg.isEmpty()) {
+            if ((segment?.currentSequence ?: 0) > 0) segment!!.currentSequence else 1
+        } else {
+            val maxSeqFromPoles = polesInSeg.maxOfOrNull { it.sequence } ?: 0
+            val segmentSeq = segment?.currentSequence ?: 0
+            maxOf(maxSeqFromPoles, segmentSeq) + 1
+        }
 
-        // Architecture Section 9 Compliant Pole Code (e.g. PL-JPR-CTR-001)
-        val prefix = if (locationCode.isNotBlank()) "PL-${cityCode.uppercase()}-${locationCode.uppercase()}" else "PL-${cityCode.uppercase()}"
-        val poleCodeStr = "$prefix-${String.format(Locale.US, "%03d", nextSeq)}"
+        // Format Asset UID Resmi Alpaca PRA: POL-MPO-[KOTA]-[SEQ:04d]
+        val cleanCity = cityCode.trim().uppercase().take(3).ifEmpty { "TMK" }
+        val assetUidStr = "POL-MPO-$cleanCity-${String.format(Locale.US, "%04d", nextSeq)}"
         val poleId = UUID.randomUUID().toString()
 
         if (segment != null) {
             val updatedSegment = segment.copy(currentSequence = nextSeq)
+            val currProj = _project.value
+            _project.value = currProj.copy(
+                segments = currProj.segments.map { if (it.id == segmentId) updatedSegment else it }
+            )
             scope.launch {
                 dao.updateSegment(updatedSegment)
             }
@@ -197,34 +337,49 @@ class InventoryRepository(private val context: Context) {
 
         val defaultLat = if (currentLat != 0.0) currentLat else -3.6954
         val defaultLng = if (currentLng != 0.0) currentLng else 128.1814
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
 
-        val newPole = Pole(
+        val newPole = PoleEntity(
             id = poleId,
             segmentId = segmentId,
             sequence = nextSeq,
+            assetUid = assetUidStr,
+            poleCode = assetUidStr,
+            routeName = segment?.name ?: "",
+            poId = segment?.poId ?: "",
+            assetClass = assetClass,
+            assetType = "steel",
             latitude = defaultLat,
             longitude = defaultLng,
+            rawLatitude = defaultLat,
+            rawLongitude = defaultLng,
             accuracy = 2.8f,
-            capturedTimestamp = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date()),
-            type = PoleType.CONCRETE,
+            photoPath = null,
+            type = PoleType.STEEL,
             condition = PoleCondition.GOOD,
             ownership = PoleOwnership.LINTASARTA,
-            height = "9m",
+            syncStatus = "PENDING",
+            capturedTimestamp = now,
+            timestamp = now,
+            height = if (assetClass == "pole_7") "7m" else "9m",
             tagNumber = "",
             hasFoCable = true,
             cableCondition = CableCondition.GOOD,
             equipment = setOf("ODP", "Closure"),
             notes = "",
-            photoPaths = emptyList(),
-            status = TagStatus.NOT_TAGGED,
-            poleCode = poleCodeStr
+            isSafetyDeferred = false,
+            matchStatus = "MATCHED",
+            isExistingPole = false,
+            isLocationLocked = false,
+            originalLatitude = defaultLat,
+            originalLongitude = defaultLng
         )
 
         _currentDraftPole.value = newPole
         _targetPoleId.value = poleId
         _selectedSegmentId.value = segmentId
-        
-        // Simpan langsung ke Room
+        _poles.value = _poles.value + (poleId to newPole)
+
         scope.launch {
             dao.insertPole(newPole)
         }
@@ -262,8 +417,11 @@ class InventoryRepository(private val context: Context) {
             val updated = current.copy(
                 latitude = lat,
                 longitude = lng,
+                rawLatitude = current.rawLatitude ?: lat,
+                rawLongitude = current.rawLongitude ?: lng,
                 accuracy = accuracy,
-                capturedTimestamp = now
+                capturedTimestamp = now,
+                timestamp = now
             )
             _currentDraftPole.value = updated
             scope.launch {
@@ -277,8 +435,11 @@ class InventoryRepository(private val context: Context) {
                     val updated = pole.copy(
                         latitude = lat,
                         longitude = lng,
+                        rawLatitude = pole.rawLatitude ?: lat,
+                        rawLongitude = pole.rawLongitude ?: lng,
                         accuracy = accuracy,
-                        capturedTimestamp = now
+                        capturedTimestamp = now,
+                        timestamp = now
                     )
                     _currentDraftPole.value = updated
                     dao.insertPole(updated)
@@ -295,8 +456,11 @@ class InventoryRepository(private val context: Context) {
         val locked = current.copy(
             latitude = finalLat,
             longitude = finalLng,
+            rawLatitude = current.rawLatitude ?: finalLat,
+            rawLongitude = current.rawLongitude ?: finalLng,
             accuracy = accuracy,
             capturedTimestamp = now,
+            timestamp = now,
             isLocationLocked = true
         )
         _currentDraftPole.value = locked
@@ -313,7 +477,7 @@ class InventoryRepository(private val context: Context) {
             dao.insertPole(unlocked)
         }
     }
-    
+
     fun updatePoleLocationDirectly(poleId: String, lat: Double, lng: Double) {
         val pole = _poles.value[poleId]
         if (pole != null) {
@@ -350,12 +514,14 @@ class InventoryRepository(private val context: Context) {
         notes: String
     ) {
         val current = _currentDraftPole.value
+        val derivedClass = if (height.contains("7")) "pole_7" else "pole_9"
         if (current != null) {
             val updated = current.copy(
                 type = type,
                 condition = condition,
                 ownership = ownership,
                 height = height,
+                assetClass = derivedClass,
                 tagNumber = tagNumber,
                 hasFoCable = hasFoCable,
                 cableCondition = cableCondition,
@@ -376,6 +542,7 @@ class InventoryRepository(private val context: Context) {
                         condition = condition,
                         ownership = ownership,
                         height = height,
+                        assetClass = derivedClass,
                         tagNumber = tagNumber,
                         hasFoCable = hasFoCable,
                         cableCondition = cableCondition,
@@ -400,11 +567,8 @@ class InventoryRepository(private val context: Context) {
     }
 
     fun setDraftPhotoForSlot(slotIndex: Int, photoPath: String) {
-        if (slotIndex !in 0..9) return
         val current = _currentDraftPole.value ?: return
-        val currentSlots = normalizePhotoSlots(current.photoPaths)
-        currentSlots[slotIndex] = photoPath
-        val updated = current.copy(photoPaths = currentSlots)
+        val updated = current.copy(photoPath = photoPath)
         _currentDraftPole.value = updated
         scope.launch {
             dao.insertPole(updated)
@@ -412,18 +576,12 @@ class InventoryRepository(private val context: Context) {
     }
 
     fun removeDraftPhotoFromSlot(slotIndex: Int) {
-        if (slotIndex !in 0..9) return
         val current = _currentDraftPole.value ?: return
-        val currentSlots = normalizePhotoSlots(current.photoPaths)
-        val oldPath = currentSlots[slotIndex]
-        if (oldPath.isNotEmpty()) {
+        current.photoPath?.let { oldPath ->
             val file = File(oldPath)
-            if (file.exists()) {
-                file.delete()
-            }
+            if (file.exists()) file.delete()
         }
-        currentSlots[slotIndex] = ""
-        val updated = current.copy(photoPaths = currentSlots)
+        val updated = current.copy(photoPath = null, photoSha256 = null)
         _currentDraftPole.value = updated
         scope.launch {
             dao.insertPole(updated)
@@ -432,43 +590,33 @@ class InventoryRepository(private val context: Context) {
 
     fun addDraftPhoto(photoPath: String) {
         val current = _currentDraftPole.value ?: return
-        val currentSlots = normalizePhotoSlots(current.photoPaths)
-        // Find first empty slot
-        val firstEmptyIndex = currentSlots.indexOfFirst { it.isEmpty() }
-        if (firstEmptyIndex != -1) {
-            setDraftPhotoForSlot(firstEmptyIndex, photoPath)
-        } else {
-            setDraftPhotoForSlot(3, photoPath) // Replace optional if full
+        val updated = current.copy(photoPath = photoPath)
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.insertPole(updated)
         }
     }
 
     fun addDraftPhotoWithNotes(photoPath: String, additionalNote: String) {
-        addDraftPhoto(photoPath)
         val current = _currentDraftPole.value ?: return
-        if (additionalNote.isNotBlank()) {
-            val updatedNotes = if (current.notes.isEmpty()) {
-                "[Tambahan]: $additionalNote"
-            } else {
-                "${current.notes}\n[Tambahan]: $additionalNote"
-            }
-            val updated = current.copy(notes = updatedNotes)
-            _currentDraftPole.value = updated
-            scope.launch {
-                dao.insertPole(updated)
-            }
-        }
-    }
-    
-    fun removeDraftPhoto(photoPath: String) {
-        val current = _currentDraftPole.value ?: return
-        val currentSlots = normalizePhotoSlots(current.photoPaths)
-        val index = currentSlots.indexOf(photoPath)
-        if (index != -1) {
-            removeDraftPhotoFromSlot(index)
+        val updatedNotes = if (additionalNote.isNotBlank()) {
+            if (current.notes.isEmpty()) "[Tambahan]: $additionalNote" else "${current.notes}\n[Tambahan]: $additionalNote"
+        } else current.notes
+        val updated = current.copy(photoPath = photoPath, notes = updatedNotes)
+        _currentDraftPole.value = updated
+        scope.launch {
+            dao.insertPole(updated)
         }
     }
 
-    fun saveDraftPole(): Pole? {
+    fun removeDraftPhoto(photoPath: String) {
+        val current = _currentDraftPole.value ?: return
+        if (current.photoPath == photoPath) {
+            removeDraftPhotoFromSlot(0)
+        }
+    }
+
+    fun saveDraftPole(): PoleEntity? {
         var draft = _currentDraftPole.value
         if (draft == null && _targetPoleId.value.isNotEmpty()) {
             draft = _poles.value[_targetPoleId.value]
@@ -479,11 +627,10 @@ class InventoryRepository(private val context: Context) {
             SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
         } else draft.capturedTimestamp
 
-        val finalStatus = if (draft.condition == PoleCondition.CRITICAL) TagStatus.CONFLICT else TagStatus.COMPLETED
-
         val savedPole = draft.copy(
             capturedTimestamp = now,
-            status = finalStatus
+            timestamp = now,
+            syncStatus = "PENDING"
         )
 
         _currentDraftPole.value = savedPole
@@ -492,12 +639,97 @@ class InventoryRepository(private val context: Context) {
             dao.insertPole(savedPole)
             recalculateProjectStats()
         }
-        
+
         return savedPole
     }
 
+    /**
+     * Menyimpan Hasil Quick Tagging Tiang dengan Standar Alpaca PRA & Architecture v2.3
+     */
+    fun saveQuickTagPole(
+        poleId: String,
+        latitude: Double,
+        longitude: Double,
+        originalLatitude: Double? = null,
+        originalLongitude: Double? = null,
+        photoPath: String?,
+        assetClass: String = "pole_9",
+        assetType: String = "steel",
+        isExistingPole: Boolean = false,
+        isSafetyDeferred: Boolean = false,
+        safetyDeferralReason: String? = null,
+        photoSha256: String? = null,
+        matchStatus: String = "MATCHED",
+        notes: String? = null,
+        accuracy: Float = 2.5f
+    ): PoleEntity? {
+        val draft = _currentDraftPole.value?.takeIf { it.id == poleId } ?: _poles.value[poleId] ?: return null
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+
+        val savedPole = draft.copy(
+            latitude = latitude,
+            longitude = longitude,
+            rawLatitude = originalLatitude ?: draft.rawLatitude ?: latitude,
+            rawLongitude = originalLongitude ?: draft.rawLongitude ?: longitude,
+            originalLatitude = originalLatitude ?: latitude,
+            originalLongitude = originalLongitude ?: longitude,
+            accuracy = accuracy,
+            photoPath = photoPath,
+            photoSha256 = photoSha256,
+            assetClass = assetClass,
+            assetType = assetType,
+            height = if (assetClass == "pole_7") "7m" else "9m",
+            capturedTimestamp = now,
+            timestamp = now,
+            syncStatus = "PENDING",
+            isExistingPole = isExistingPole,
+            isSafetyDeferred = isSafetyDeferred,
+            safetyDeferralReason = safetyDeferralReason,
+            matchStatus = matchStatus,
+            notes = notes ?: draft.notes,
+            isLocationLocked = true
+        )
+
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[savedPole.id] = savedPole
+        _poles.value = updatedMap
+        _currentDraftPole.value = savedPole
+
+        scope.launch {
+            dao.insertPole(savedPole)
+            recalculateProjectStats()
+        }
+
+        return savedPole
+    }
+
+    /**
+     * Menyimpan hasil evaluasi keselamatan lapangan (Approach Safety Deferral)
+     * tanpa memalsukan titik koordinat tiang selesai.
+     */
+    fun saveSafetyDeferredPole(
+        poleId: String,
+        latitude: Double,
+        longitude: Double,
+        reason: String,
+        assetClass: String = "pole_9"
+    ): PoleEntity? {
+        return saveQuickTagPole(
+            poleId = poleId,
+            latitude = latitude,
+            longitude = longitude,
+            originalLatitude = latitude,
+            originalLongitude = longitude,
+            photoPath = null,
+            assetClass = assetClass,
+            isSafetyDeferred = true,
+            safetyDeferralReason = reason,
+            matchStatus = "ANOMALY",
+            notes = "[SAFETY DEFERRAL]: $reason"
+        )
+    }
+
     private suspend fun recalculateProjectStats() {
-        val currentProj = dao.getProjectSync() ?: return
         val allSegments = dao.getAllSegmentsSync()
         val allPoles = dao.getAllPolesSync()
 
@@ -519,21 +751,50 @@ class InventoryRepository(private val context: Context) {
             )
         }
 
-        // Simpan pembaruan status segmen ke database
         dao.insertSegments(updatedSegments)
 
         val totalPoles = updatedSegments.sumOf { it.totalPoles }
         val completedPoles = updatedSegments.sumOf { it.completedPoles }
         val conflictPoles = updatedSegments.sumOf { it.conflictPoles }
+        val totalP7 = allPoles.count { it.assetClass == "pole_7" }
+        val totalP9 = allPoles.count { it.assetClass == "pole_9" }
 
-        val updatedProject = currentProj.copy(
+        val currentProj = _project.value
+        _project.value = currentProj.copy(
+            segments = updatedSegments,
             totalPoles = totalPoles,
             completedPoles = completedPoles,
             conflictPoles = conflictPoles,
-            uncompletedPoles = totalPoles - completedPoles
+            uncompletedPoles = (totalPoles - completedPoles).coerceAtLeast(0),
+            totalP7 = totalP7,
+            totalP9 = totalP9
         )
-        
-        dao.updateProject(updatedProject)
+    }
+
+    fun markPolesAsSynced(poleIds: List<String>) {
+        scope.launch {
+            poleIds.forEach { id ->
+                dao.updatePoleSyncStatus(id, "SYNCED")
+            }
+            val updated = _poles.value.toMutableMap()
+            poleIds.forEach { id ->
+                val p = updated[id]
+                if (p != null) {
+                    updated[id] = p.copy(syncStatus = "SYNCED")
+                }
+            }
+            _poles.value = updated
+        }
+    }
+
+    fun deletePole(poleId: String) {
+        scope.launch {
+            dao.deletePoleById(poleId)
+            val updated = _poles.value.toMutableMap()
+            updated.remove(poleId)
+            _poles.value = updated
+            recalculateProjectStats()
+        }
     }
 
     fun addExportFile(file: ExportFile) {
@@ -550,15 +811,14 @@ class InventoryRepository(private val context: Context) {
 
     fun clearAllData() {
         scope.launch {
-            dao.clearProjects()
             dao.clearSegments()
             dao.clearPoles()
             dao.clearExportFiles()
-            
-            // Re-initialize barebone project
-            dao.insertProject(createInitialProject())
+
+            // Re-seed 143 segmen MPO
+            seedMpoSegments(forceReload = true)
         }
-        
+
         _targetPoleId.value = ""
         _currentDraftPole.value = null
     }

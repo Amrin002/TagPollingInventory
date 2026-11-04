@@ -39,8 +39,8 @@ fun ExportCenterScreen(
             ?: project.segments.firstOrNull() 
             ?: Segment(
                 id = "", 
-                name = "No Segment Selected", 
-                route = "N/A", 
+                name = "Tidak Ada Segment Dipilih", 
+                route = "T/A", 
                 startPoint = Pair(0.0, 0.0), 
                 endPoint = Pair(0.0, 0.0), 
                 status = SegmentStatus.NOT_STARTED, 
@@ -74,13 +74,13 @@ fun ExportCenterScreen(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Export Inventory",
+                        text = "Ekspor Inventaris",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White
                     )
                     Text(
-                        text = "${project.name} • ${project.segments.size} Segments",
+                        text = "${project.name} • ${project.segments.size} Segment",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White.copy(alpha = 0.85f)
                     )
@@ -94,11 +94,11 @@ fun ExportCenterScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.FolderOpen,
-                        contentDescription = "Export History",
+                        contentDescription = "Riwayat Ekspor",
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("History", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Riwayat", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -114,7 +114,7 @@ fun ExportCenterScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "SELECT EXPORT SCOPE / SEGMENT",
+                    text = "PILIH CAKUPAN EKSPOR / SEGMENT",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold,
                     color = TelecomPrimary
@@ -129,7 +129,7 @@ fun ExportCenterScreen(
                         value = activeSegment.name,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Active Segment Scope") },
+                        label = { Text("Cakupan Segment Aktif") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isSegmentDropdownExpanded) },
                         colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
                         modifier = Modifier
@@ -148,7 +148,7 @@ fun ExportCenterScreen(
                                     Column {
                                         Text(segment.name, fontWeight = FontWeight.Bold)
                                         Text(
-                                            text = "${segment.totalPoles} poles • ${segment.route.ifEmpty { "No Route" }}",
+                                            text = "${segment.totalPoles} tiang • ${segment.route.ifEmpty { "Tidak Ada Rute" }}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color.Gray
                                         )
@@ -176,15 +176,15 @@ fun ExportCenterScreen(
                         Text("${activeSegment.totalPoles}", fontWeight = FontWeight.Bold)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Completed", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
+                        Text("Selesai", style = MaterialTheme.typography.labelSmall, color = Color(0xFF2E7D32))
                         Text("${activeSegment.completedPoles}", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Conflict", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
+                        Text("Konflik", style = MaterialTheme.typography.labelSmall, color = Color(0xFFC62828))
                         Text("${activeSegment.conflictPoles}", fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Local Records", style = MaterialTheme.typography.labelSmall, color = TelecomPrimary)
+                        Text("Catatan Lokal", style = MaterialTheme.typography.labelSmall, color = TelecomPrimary)
                         Text("${activeSegment.completedPoles + activeSegment.conflictPoles}", fontWeight = FontWeight.Bold, color = TelecomPrimary)
                     }
                 }
@@ -192,7 +192,7 @@ fun ExportCenterScreen(
         }
 
         Text(
-            text = "SELECT EXPORT FORMAT",
+            text = "PILIH FORMAT EKSPOR",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF546E7A)
@@ -227,12 +227,12 @@ fun ExportCenterScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "CSV Format",
+                        text = "Format CSV",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Export pole inventory attributes and coordinates into spreadsheet.",
+                        text = "Ekspor atribut dan koordinat inventaris tiang ke spreadsheet.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
@@ -245,7 +245,7 @@ fun ExportCenterScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Export CSV", fontWeight = FontWeight.Bold)
+                        Text("Ekspor CSV", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -280,12 +280,12 @@ fun ExportCenterScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "KML Format",
+                        text = "Format KML",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Export pole locations and attributes as KML for Google Earth & GIS.",
+                        text = "Ekspor lokasi dan atribut tiang sebagai KML untuk Google Earth & GIS.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
@@ -298,7 +298,7 @@ fun ExportCenterScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Export KML", fontWeight = FontWeight.Bold)
+                        Text("Ekspor KML", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -333,12 +333,12 @@ fun ExportCenterScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "KMZ Format",
+                        text = "Format KMZ",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Export compressed KML package with photo attachments and metadata.",
+                        text = "Ekspor paket KML terkompresi dengan lampiran foto dan metadata.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
@@ -351,7 +351,7 @@ fun ExportCenterScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF6C00)),
                         shape = RoundedCornerShape(8.dp)
                     ) {
-                        Text("Export KMZ", fontWeight = FontWeight.Bold)
+                        Text("Ekspor KMZ", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -384,7 +384,7 @@ fun ExportOptionsModal(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Export Options (${format.displayName})",
+                text = "Opsi Ekspor (${format.displayName})",
                 fontWeight = FontWeight.Bold
             )
         },
@@ -394,7 +394,7 @@ fun ExportOptionsModal(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "Export Scope",
+                    text = "Cakupan Ekspor",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = TelecomPrimary
@@ -416,7 +416,7 @@ fun ExportOptionsModal(
                 HorizontalDivider()
 
                 Text(
-                    text = "Data Status",
+                    text = "Status Data",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = TelecomPrimary
@@ -427,7 +427,7 @@ fun ExportOptionsModal(
                         checked = options.includeCompleted,
                         onCheckedChange = { options = options.copy(includeCompleted = it) }
                     )
-                    Text("Completed Records")
+                    Text("Catatan Selesai")
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -435,7 +435,7 @@ fun ExportOptionsModal(
                         checked = options.includeConflict,
                         onCheckedChange = { options = options.copy(includeConflict = it) }
                     )
-                    Text("Conflict Records")
+                    Text("Catatan Konflik")
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -443,13 +443,13 @@ fun ExportOptionsModal(
                         checked = options.includeIncomplete,
                         onCheckedChange = { options = options.copy(includeIncomplete = it) }
                     )
-                    Text("Incomplete Records")
+                    Text("Catatan Belum Selesai")
                 }
 
                 HorizontalDivider()
 
                 Text(
-                    text = "Included Fields",
+                    text = "Kolom yang Disertakan",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = TelecomPrimary
@@ -460,7 +460,7 @@ fun ExportOptionsModal(
                         checked = options.includeCoordinates,
                         onCheckedChange = { options = options.copy(includeCoordinates = it) }
                     )
-                    Text("Coordinates (Lat / Long)")
+                    Text("Koordinat (Lintang / Bujur)")
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -468,7 +468,7 @@ fun ExportOptionsModal(
                         checked = options.includeAttributes,
                         onCheckedChange = { options = options.copy(includeAttributes = it) }
                     )
-                    Text("Pole Attributes & Equipment")
+                    Text("Atribut Tiang & Peralatan")
                 }
 
                 if (format == ExportFormat.KMZ || format == ExportFormat.KML) {
@@ -477,7 +477,7 @@ fun ExportOptionsModal(
                             checked = options.includePhotoReferences,
                             onCheckedChange = { options = options.copy(includePhotoReferences = it) }
                         )
-                        Text("Include Photo References")
+                        Text("Sertakan Referensi Foto")
                     }
                 }
             }
@@ -490,12 +490,12 @@ fun ExportOptionsModal(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
             ) {
-                Text("Generate Export", fontWeight = FontWeight.Bold)
+                Text("Buat Ekspor", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("Batal")
             }
         }
     )

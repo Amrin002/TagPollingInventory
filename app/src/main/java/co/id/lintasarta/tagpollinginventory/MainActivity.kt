@@ -18,14 +18,49 @@ import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 
 class MainActivity : ComponentActivity() {
 
+    private var mainViewModel: MainViewModel? = null
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         // Handle permission results if needed
     }
 
+    override fun onNewIntent(intent: android.content.Intent?) {
+        super.onNewIntent(intent)
+        handleDebugNavigation(intent)
+    }
+
+    private fun handleDebugNavigation(intent: android.content.Intent?) {
+        val targetScreen = intent?.getStringExtra("screen")
+        if (targetScreen != null) {
+            try {
+                val flow = co.id.lintasarta.tagpollinginventory.ui.viewmodel.ScreenFlow.valueOf(targetScreen)
+                mainViewModel?.navigateTo(flow)
+            } catch (_: Exception) {}
+        }
+        val targetTab = intent?.getStringExtra("tab")
+        if (targetTab != null) {
+            try {
+                val tab = co.id.lintasarta.tagpollinginventory.ui.viewmodel.AppTab.valueOf(targetTab)
+                mainViewModel?.switchTab(tab)
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        try {
+            val osmdroidDir = java.io.File(filesDir, "osmdroid").apply { if (!exists()) mkdirs() }
+            val tilesDir = java.io.File(osmdroidDir, "tiles").apply { if (!exists()) mkdirs() }
+            val prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this)
+            org.osmdroid.config.Configuration.getInstance().load(this, prefs)
+            org.osmdroid.config.Configuration.getInstance().userAgentValue = packageName
+            org.osmdroid.config.Configuration.getInstance().osmdroidBasePath = osmdroidDir
+            org.osmdroid.config.Configuration.getInstance().osmdroidTileCache = tilesDir
+        } catch (_: Exception) {}
+
         enableEdgeToEdge()
         
         requestStoragePermissions()
@@ -33,6 +68,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             TagPollingInventoryTheme {
                 val viewModel: MainViewModel = viewModel()
+                mainViewModel = viewModel
+                
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    handleDebugNavigation(intent)
+                }
                 
                 // Save data when app goes to background
                 val lifecycleOwner = LocalLifecycleOwner.current

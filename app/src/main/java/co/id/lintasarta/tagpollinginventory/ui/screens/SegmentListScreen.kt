@@ -10,6 +10,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +30,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
+import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.components.SegmentStatusBadge
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
@@ -46,6 +51,7 @@ fun SegmentListScreen(
     var selectedSegmentIds by remember { mutableStateOf(setOf<String>()) }
     val isMultiSelectionMode = selectedSegmentIds.isNotEmpty()
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var activeSegmentForAction by remember { mutableStateOf<Segment?>(null) }
 
     val filteredSegments = remember(project.segments, filter, searchQuery) {
         project.segments.filter { seg ->
@@ -83,18 +89,18 @@ fun SegmentListScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { selectedSegmentIds = emptySet() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancel Selection", tint = Color.White)
+                            Icon(Icons.Default.Close, contentDescription = "Batalkan Seleksi", tint = Color.White)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "${selectedSegmentIds.size} Selected",
+                            text = "${selectedSegmentIds.size} Dipilih",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
                     IconButton(onClick = { showDeleteConfirmDialog = true }) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete Selected", tint = Color(0xFFEF5350))
+                        Icon(Icons.Default.Delete, contentDescription = "Hapus yang Dipilih", tint = Color(0xFFEF5350))
                     }
                 }
             }
@@ -118,24 +124,13 @@ fun SegmentListScreen(
                             color = Color.White
                         )
                         Text(
-                            text = "Segments (${project.segments.size} Total)",
+                            text = "Segment (${project.segments.size} Total)",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (networkStatus.isOnline) Color(0xFF2E7D32) else Color(0xFFEF6C00)
-                    ) {
-                        Text(
-                            text = if (networkStatus.isOnline) "ONLINE" else "OFFLINE",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
+                    NetworkStatusDot(networkStatus = networkStatus, size = 11.dp)
                 }
             }
         }
@@ -145,7 +140,7 @@ fun SegmentListScreen(
             value = searchQuery,
             onValueChange = { viewModel.setSegmentSearchQuery(it) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search segments...") },
+            placeholder = { Text("Cari segment...") },
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             singleLine = true,
             shape = RoundedCornerShape(12.dp)
@@ -157,10 +152,10 @@ fun SegmentListScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             val filterOptions = listOf(
-                "ALL" to "All",
-                "IN_PROGRESS" to "In Progress",
-                "COMPLETED" to "Completed",
-                "CONFLICT" to "Conflict"
+                "ALL" to "Semua",
+                "IN_PROGRESS" to "Sedang Berjalan",
+                "COMPLETED" to "Selesai",
+                "CONFLICT" to "Konflik"
             )
 
             filterOptions.forEach { (key, label) ->
@@ -202,7 +197,7 @@ fun SegmentListScreen(
                                     selectedSegmentIds + segment.id
                                 }
                             } else {
-                                onSegmentClick(segment.id)
+                                activeSegmentForAction = segment
                             }
                         }
                     )
@@ -217,7 +212,7 @@ fun SegmentListScreen(
                 containerColor = TelecomPrimary,
                 contentColor = Color.White
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Create Segment")
+                Icon(Icons.Default.Add, contentDescription = "Buat Segment")
             }
         }
     }
@@ -228,8 +223,8 @@ fun SegmentListScreen(
                 showDeleteConfirmDialog = false 
                 if (selectedSegmentIds.size == 1) selectedSegmentIds = emptySet()
             },
-            title = { Text("Delete Segments", fontWeight = FontWeight.Bold) },
-            text = { Text("Are you sure you want to delete ${selectedSegmentIds.size} segment(s)? All poles and photos tied to these segments will also be permanently deleted.") },
+            title = { Text("Hapus Segment", fontWeight = FontWeight.Bold) },
+            text = { Text("Apakah Anda yakin ingin menghapus ${selectedSegmentIds.size} segment? Semua tiang dan foto yang terikat pada segment ini juga akan dihapus secara permanen.") },
             confirmButton = {
                 Button(
                     onClick = {
@@ -240,7 +235,7 @@ fun SegmentListScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
                 ) {
-                    Text("Delete", fontWeight = FontWeight.Bold)
+                    Text("Hapus", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -248,10 +243,225 @@ fun SegmentListScreen(
                     showDeleteConfirmDialog = false 
                     if (selectedSegmentIds.size == 1) selectedSegmentIds = emptySet()
                 }) {
-                    Text("Cancel")
+                    Text("Batal")
                 }
             }
         )
+    }
+
+    // Modal Choice Bottom Sheet: Quick Tagging vs Tag Polling PM vs Detail
+    activeSegmentForAction?.let { segment ->
+        ModalBottomSheet(
+            onDismissRequest = { activeSegmentForAction = null },
+            sheetState = rememberModalBottomSheetState(),
+            containerColor = Color.White,
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "PILIH MODE SURVEI",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = segment.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TelecomPrimary
+                    )
+                    Text(
+                        text = "${segment.route.ifEmpty { "Segment Manual" }} • ${segment.completedPoles}/${segment.totalPoles} tiang selesai",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.DarkGray
+                    )
+                }
+
+                HorizontalDivider()
+
+                // Option 1: Quick Tagging
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val segId = segment.id
+                            activeSegmentForAction = null
+                            viewModel.startQuickTaggingForSegment(segId)
+                        },
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2F1)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFF80CBC4))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF00897B),
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Bolt,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Quick Tagging",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF004D40)
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFF00897B)
+                                ) {
+                                    Text(
+                                        text = "Cepat",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "1x Fix GPS + 1 Foto Tiang. Ringkas & efisien untuk inventarisasi tiang rute panjang.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF00695C)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = Color(0xFF004D40)
+                        )
+                    }
+                }
+
+                // Option 2: Tag Polling PM (Preventive Maintenance)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val segId = segment.id
+                            activeSegmentForAction = null
+                            viewModel.startPmSurveyForSegment(segId)
+                        },
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFF90CAF9))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = TelecomPrimary,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Tag Polling PM (Lengkap)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = TelecomPrimary
+                            )
+                            Text(
+                                text = "Peta deviasi rute FO, GNSS telemetri 10 sampel, 10 foto SOP, atribut fisik tiang, kabel & aksesoris.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF0D47A1)
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = TelecomPrimary
+                        )
+                    }
+                }
+
+                // Option 3: Buka Detail Segmen & Tiang
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val segId = segment.id
+                            activeSegmentForAction = null
+                            onSegmentClick(segId)
+                        },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFCFD8DC))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFFECEFF1),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = Color(0xFF455A64),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Lihat Detail Segmen & Daftar Tiang",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF37474F)
+                            )
+                            Text(
+                                text = "Tinjau statistik, peta sebaran tiang, dan daftar tiang pada segmen ini.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = null,
+                            tint = Color.Gray
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -306,7 +516,7 @@ fun SegmentCard(
                             color = TelecomPrimary
                         )
                         Text(
-                            text = segment.route.ifEmpty { "Manual Segment" },
+                            text = segment.route.ifEmpty { "Segment Manual" },
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray
                         )
@@ -323,13 +533,13 @@ fun SegmentCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "${segment.completedPoles} / ${segment.totalPoles} completed",
+                        text = "${segment.completedPoles} / ${segment.totalPoles} selesai",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.SemiBold
                     )
                     if (segment.conflictPoles > 0) {
                         Text(
-                            text = "⚠ ${segment.conflictPoles} Conflict",
+                            text = "⚠ ${segment.conflictPoles} Konflik",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color(0xFFC62828),
                             fontWeight = FontWeight.Bold

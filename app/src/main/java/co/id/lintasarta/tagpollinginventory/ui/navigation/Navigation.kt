@@ -42,7 +42,7 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
     val currentScreen by viewModel.currentScreen.collectAsState()
 
     val showBottomBar = currentScreen == ScreenFlow.TAB_ROOT
-    val canGoBack = currentScreen != ScreenFlow.TAB_ROOT || currentTab != AppTab.DASHBOARD
+    val canGoBack = (currentScreen != ScreenFlow.TAB_ROOT && !(currentScreen == ScreenFlow.LOGIN && !viewModel.userSessionManager.hasActiveSession())) || (currentScreen == ScreenFlow.TAB_ROOT && currentTab != AppTab.DASHBOARD)
 
     // Intercept system/hardware back button or gesture to navigate back properly!
     BackHandler(enabled = canGoBack) {
@@ -59,25 +59,25 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
             ),
             NavTabItem(
                 tab = AppTab.SEGMENTS,
-                label = "Segments",
+                label = "Segmen",
                 activeIcon = Icons.AutoMirrored.Filled.AltRoute,
                 inactiveIcon = Icons.AutoMirrored.Outlined.AltRoute
             ),
             NavTabItem(
                 tab = AppTab.MAP,
-                label = "Field Map",
-                activeIcon = Icons.Filled.Explore,
-                inactiveIcon = Icons.Outlined.Explore
+                label = "Tagging",
+                activeIcon = Icons.Filled.AddLocationAlt,
+                inactiveIcon = Icons.Outlined.AddLocationAlt
             ),
             NavTabItem(
                 tab = AppTab.EXPORT,
-                label = "Export",
-                activeIcon = Icons.Filled.CloudUpload,
-                inactiveIcon = Icons.Outlined.CloudUpload
+                label = "Sync",
+                activeIcon = Icons.Filled.CloudSync,
+                inactiveIcon = Icons.Outlined.CloudSync
             ),
             NavTabItem(
                 tab = AppTab.SETTINGS,
-                label = "Settings",
+                label = "Pengaturan",
                 activeIcon = Icons.Filled.Tune,
                 inactiveIcon = Icons.Outlined.Tune
             )
@@ -156,46 +156,58 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                     when (currentTab) {
                         AppTab.DASHBOARD -> DashboardScreen(
                             viewModel = viewModel,
-                            onContinueFieldWork = { viewModel.navigateTo(ScreenFlow.FIELD_MAP) },
+                            onContinueFieldWork = { viewModel.switchTab(AppTab.SEGMENTS) },
                             onViewProject = { viewModel.switchTab(AppTab.SEGMENTS) },
-                            onCreateSegmentClick = { viewModel.navigateTo(ScreenFlow.CREATE_SEGMENT) },
-                            onImportRouteClick = { viewModel.navigateTo(ScreenFlow.IMPORT_ROUTE) }
+                            onCreateSegmentClick = { viewModel.switchTab(AppTab.SEGMENTS) },
+                            onQuickTaggingClick = { viewModel.switchTab(AppTab.SEGMENTS) }
                         )
-                        AppTab.SEGMENTS -> SegmentListScreen(
+                        AppTab.SEGMENTS -> SegmentExplorerScreen(
                             viewModel = viewModel,
-                            onSegmentClick = { segId -> viewModel.selectSegment(segId) }
+                            onSegmentSelected = { segId -> viewModel.startQuickTaggingForSegment(segId) }
                         )
-                        AppTab.MAP -> FieldMapScreen(
+                        AppTab.MAP -> {
+                            val activeSegId by viewModel.selectedSegmentId.collectAsState()
+                            if (activeSegId.isNotBlank()) {
+                                QuickTaggingSessionScreen(
+                                    viewModel = viewModel,
+                                    onBackClick = { viewModel.switchTab(AppTab.SEGMENTS) }
+                                )
+                            } else {
+                                SegmentExplorerScreen(
+                                    viewModel = viewModel,
+                                    onSegmentSelected = { segId -> viewModel.startQuickTaggingForSegment(segId) }
+                                )
+                            }
+                        }
+                        AppTab.EXPORT -> ReviewExportSyncScreen(
                             viewModel = viewModel,
-                            onBackClick = { viewModel.navigateBack() },
-                            onTagThisPoleClick = { viewModel.proceedToGpsCapture() }
-                        )
-                        AppTab.EXPORT -> ExportCenterScreen(
-                            viewModel = viewModel,
-                            onViewHistoryClick = { viewModel.navigateTo(ScreenFlow.FILE_MANAGEMENT) }
+                            onNavigateToTagging = { segId -> viewModel.startQuickTaggingForSegment(segId) }
                         )
                         AppTab.SETTINGS -> SettingsScreen(
                             viewModel = viewModel,
-                            onNavigateToCameraSettings = { viewModel.navigateTo(ScreenFlow.GEOTAG_CAMERA_SETTINGS) }
+                            onNavigateToCameraSettings = { viewModel.navigateTo(ScreenFlow.GEOTAG_CAMERA_SETTINGS) },
+                            onNavigateToLogin = { viewModel.navigateTo(ScreenFlow.LOGIN) }
                         )
                     }
                 }
+
+                ScreenFlow.LOGIN -> LoginScreen(
+                    viewModel = viewModel,
+                    onBackClick = { viewModel.navigateBack() }
+                )
 
                 ScreenFlow.CREATE_SEGMENT -> CreateSegmentScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() }
                 )
 
-                ScreenFlow.IMPORT_ROUTE -> ImportRouteScreen(
-                    viewModel = viewModel,
-                    onBackClick = { viewModel.navigateBack() }
-                )
-
-                ScreenFlow.IMPORT_PREVIEW -> ImportPreviewScreen(
-                    viewModel = viewModel,
-                    onBackClick = { viewModel.navigateBack() },
-                    onConfirmImportClick = { viewModel.navigateTo(ScreenFlow.FIELD_MAP) }
-                )
+                ScreenFlow.IMPORT_ROUTE, ScreenFlow.IMPORT_PREVIEW -> {
+                    // Deprecated: Route import sudah tidak diperlukan karena 143 segmen MPO sudah preloaded
+                    SegmentListScreen(
+                        viewModel = viewModel,
+                        onSegmentClick = { segmentId -> viewModel.selectSegment(segmentId) }
+                    )
+                }
 
                 ScreenFlow.SEGMENT_DETAIL -> SegmentDetailScreen(
                     viewModel = viewModel,
@@ -265,6 +277,11 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                 ScreenFlow.GEOTAG_CAMERA_SETTINGS -> GeotagCameraSettingsScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() }
+                )
+
+                ScreenFlow.QUICK_TAGGING_SESSION -> QuickTaggingSessionScreen(
+                    viewModel = viewModel,
+                    onBackClick = { viewModel.exitQuickTagging() }
                 )
             }
         }

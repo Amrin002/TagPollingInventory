@@ -1,6 +1,7 @@
 package co.id.lintasarta.tagpollinginventory.data.local
 
 import androidx.room.TypeConverter
+import co.id.lintasarta.tagpollinginventory.data.model.RouteCoordinate
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -69,6 +70,23 @@ class Converters {
     fun toSegmentList(value: String?): List<Segment> {
         if (value.isNullOrEmpty()) return emptyList()
         val type = object : TypeToken<List<Segment>>() {}.type
+        return try {
+            gson.fromJson(value, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    // --- List<RouteCoordinate> for Segment Route Path ---
+    @TypeConverter
+    fun fromRouteCoordinateList(value: List<RouteCoordinate>?): String {
+        return gson.toJson(value ?: emptyList<RouteCoordinate>())
+    }
+
+    @TypeConverter
+    fun toRouteCoordinateList(value: String?): List<RouteCoordinate> {
+        if (value.isNullOrEmpty()) return emptyList()
+        val type = object : TypeToken<List<RouteCoordinate>>() {}.type
         return try {
             gson.fromJson(value, type) ?: emptyList()
         } catch (e: Exception) {

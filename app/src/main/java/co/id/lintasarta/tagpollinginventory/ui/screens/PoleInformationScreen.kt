@@ -31,7 +31,7 @@ fun PoleInformationScreen(
     val draftPole by viewModel.currentDraftPole.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
 
-    var poleType by remember(draftPole?.id) { mutableStateOf(draftPole?.type ?: PoleType.CONCRETE) }
+    var poleType by remember(draftPole?.id) { mutableStateOf(draftPole?.type ?: PoleType.STEEL) }
     var poleCondition by remember(draftPole?.id) { mutableStateOf(draftPole?.condition ?: PoleCondition.GOOD) }
     var ownership by remember(draftPole?.id) { mutableStateOf(draftPole?.ownership ?: PoleOwnership.LINTASARTA) }
     var height by remember(draftPole?.id) { mutableStateOf(draftPole?.height ?: "9m") }
@@ -60,7 +60,7 @@ fun PoleInformationScreen(
         viewModel.repository.updateDraftAttributes(t, c, o, h, tn, fo, cc, eq, n)
     }
 
-    val displayPoleCode = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "Target Pole"
+    val displayPoleCode = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "Target Tiang"
     val poleStatus = draftPole?.status ?: TagStatus.NOT_TAGGED
 
     val (statusColor, statusBg) = when (poleStatus) {
@@ -72,7 +72,7 @@ fun PoleInformationScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Pole Information",
+                title = "Informasi Tiang",
                 subtitle = displayPoleCode,
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
@@ -101,7 +101,7 @@ fun PoleInformationScreen(
                 ) {
                     Column {
                         Text(
-                            text = "POLE IDENTIFIER",
+                            text = "IDENTIFIER TIANG",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.Gray
@@ -127,7 +127,7 @@ fun PoleInformationScreen(
                             )
                         }
                         Text(
-                            text = "Seq #${draftPole?.sequence ?: 1}",
+                            text = "No. Urut #${draftPole?.sequence ?: 1}",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = Color.Gray
@@ -147,7 +147,7 @@ fun PoleInformationScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Pole Type",
+                        text = "Jenis Tiang",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -184,7 +184,7 @@ fun PoleInformationScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Pole Condition",
+                        text = "Kondisi Tiang",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -227,7 +227,7 @@ fun PoleInformationScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Ownership",
+                        text = "Kepemilikan",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -264,22 +264,48 @@ fun PoleInformationScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Pole Attributes",
+                        text = "Atribut Tiang",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
 
-                    OutlinedTextField(
-                        value = height,
-                        onValueChange = {
-                            height = it
-                            syncToDraft(h = it)
-                        },
-                        label = { Text("Pole Height") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
+                    val heightOptions = listOf("7m", "9m")
+                    var isHeightDropdownExpanded by remember { mutableStateOf(false) }
+
+                    ExposedDropdownMenuBox(
+                        expanded = isHeightDropdownExpanded,
+                        onExpandedChange = { isHeightDropdownExpanded = !isHeightDropdownExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = height,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Tinggi Tiang") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isHeightDropdownExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isHeightDropdownExpanded,
+                            onDismissRequest = { isHeightDropdownExpanded = false }
+                        ) {
+                            heightOptions.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option, fontWeight = FontWeight.Bold) },
+                                    onClick = {
+                                        height = option
+                                        syncToDraft(h = option)
+                                        isHeightDropdownExpanded = false
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                )
+                            }
+                        }
+                    }
 
                     OutlinedTextField(
                         value = tagNumber,
@@ -287,7 +313,7 @@ fun PoleInformationScreen(
                             tagNumber = it
                             syncToDraft(tn = it)
                         },
-                        label = { Text("Pole Tag Number") },
+                        label = { Text("Nomor Tag Tiang") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(8.dp)
@@ -312,12 +338,12 @@ fun PoleInformationScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Fiber Optic Cable Present",
+                                text = "Kabel Fiber Optic Tersedia",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (hasFoCable) "FO cable attached" else "No cable attached",
+                                text = if (hasFoCable) "Kabel Fiber Optic terpasang" else "Tidak ada kabel terpasang",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray
                             )
@@ -333,7 +359,7 @@ fun PoleInformationScreen(
 
                     if (hasFoCable) {
                         Text(
-                            text = "Cable Condition",
+                            text = "Kondisi Kabel",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -371,12 +397,12 @@ fun PoleInformationScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Additional Equipment",
+                        text = "Peralatan Tambahan",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
 
-                    val equipmentList = listOf("ODP", "Closure", "Slack", "Grounding", "Other")
+                    val equipmentList = listOf("ODP", "Closure", "Slack", "Grounding", "Lainnya")
 
                     equipmentList.forEach { eq ->
                         Row(
@@ -384,12 +410,13 @@ fun PoleInformationScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Checkbox(
-                                checked = selectedEquipment.contains(eq),
+                                checked = selectedEquipment.contains(eq) || (eq == "Other" && selectedEquipment.contains("Lainnya")),
                                 onCheckedChange = { checked ->
+                                    val targetEq = if (eq == "Other") "Lainnya" else eq
                                     val newEq = if (checked) {
-                                        selectedEquipment + eq
+                                        selectedEquipment + targetEq
                                     } else {
-                                        selectedEquipment - eq
+                                        selectedEquipment - targetEq
                                     }
                                     selectedEquipment = newEq
                                     syncToDraft(eq = newEq)
@@ -415,7 +442,7 @@ fun PoleInformationScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Field Notes",
+                        text = "Catatan Lapangan",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -426,7 +453,7 @@ fun PoleInformationScreen(
                             syncToDraft(n = it)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Enter observations, access conditions, or issues...") },
+                        placeholder = { Text("Masukkan pengamatan, kondisi akses, atau kendala...") },
                         minLines = 3,
                         shape = RoundedCornerShape(8.dp)
                     )
@@ -456,7 +483,7 @@ fun PoleInformationScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    text = "Continue to Photo Capture",
+                    text = "Lanjut ke Pengambilan Foto",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )

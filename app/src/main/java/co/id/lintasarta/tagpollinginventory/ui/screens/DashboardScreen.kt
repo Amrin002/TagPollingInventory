@@ -1,7 +1,6 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.components.OfflineStatusCard
 import co.id.lintasarta.tagpollinginventory.ui.components.StatCounterBox
 import co.id.lintasarta.tagpollinginventory.ui.theme.*
@@ -28,7 +28,7 @@ fun DashboardScreen(
     onContinueFieldWork: () -> Unit,
     onViewProject: () -> Unit,
     onCreateSegmentClick: () -> Unit,
-    onImportRouteClick: () -> Unit
+    onQuickTaggingClick: () -> Unit = { viewModel.startQuickTaggingFlow() }
 ) {
     val project by viewModel.project.collectAsState()
     val activeRoute by viewModel.activeRoute.collectAsState()
@@ -62,23 +62,29 @@ fun DashboardScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Tag Poling Inventory",
+                            text = "Tag Polling Inventory",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "Fiber Optic Field Survey",
+                            text = "Survei Lapangan Fiber Optic",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.85f)
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Default.CellTower,
-                        contentDescription = "Telecom",
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        NetworkStatusDot(networkStatus = networkStatus, size = 12.dp)
+                        Icon(
+                            imageVector = Icons.Default.CellTower,
+                            contentDescription = "Telekomunikasi",
+                            tint = Color.White,
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -89,7 +95,7 @@ fun DashboardScreen(
 
                 // Current Project Box
                 Text(
-                    text = "CURRENT PROJECT",
+                    text = "PROYEK SAAT INI",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.75f),
                     fontWeight = FontWeight.Bold
@@ -116,13 +122,13 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Progress",
+                        text = "Progres",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.White,
                         fontWeight = FontWeight.Medium
                     )
                     Text(
-                        text = "${project.completedPoles} / ${project.totalPoles} Poles",
+                        text = "${project.completedPoles} / ${project.totalPoles} Tiang",
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
@@ -140,63 +146,9 @@ fun DashboardScreen(
             }
         }
 
-        // Import FO Route Action Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onImportRouteClick),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(12.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(Color(0xFFFFF3E0), RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = null,
-                        tint = Color(0xFFEF6C00),
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = if (activeRoute != null) "Active Route: ${activeRoute?.name}" else "Import FO Route (KML/KMZ)",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (activeRoute != null) TelecomPrimary else Color.Black
-                    )
-                    Text(
-                        text = if (activeRoute != null) "${activeRoute?.coordinates?.size ?: 0} route points • ${activeRoute?.sourceFileName}" else "Import reference KML/KMZ route file from engineer",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = Color.Gray
-                )
-            }
-        }
-
-        // Dynamic Online / Offline Status Banner
-        OfflineStatusCard(networkStatus = networkStatus)
-
         // Statistics Grid
         Text(
-            text = "FIELD STATISTICS",
+            text = "STATISTIK LAPANGAN",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF546E7A)
@@ -228,7 +180,7 @@ fun DashboardScreen(
                 modifier = Modifier.weight(1f)
             )
             StatCounterBox(
-                title = "LOCAL DATA",
+                title = "DATA LOKAL",
                 count = project.completedPoles + project.conflictPoles,
                 color = TelecomPrimary,
                 bgColor = TelecomPrimaryContainer,
@@ -237,6 +189,30 @@ fun DashboardScreen(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+
+        // Quick Tagging Button (Entry Point Terpisah)
+        Button(
+            onClick = onQuickTaggingClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Bolt,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Quick Tagging (Tagging Cepat)",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
 
         // Main Action Buttons (Branching: New Field Work -> Create Segment vs Continue Field Work)
         Button(
@@ -260,7 +236,7 @@ fun DashboardScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = if (hasWorkData) "Continue Field Work" else "New Field Work",
+                text = if (hasWorkData) "Tag Polling PM (Survei Lengkap)" else "Pekerjaan Lapangan Baru (PM)",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -281,7 +257,7 @@ fun DashboardScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "View Project",
+                text = "Lihat Proyek",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )

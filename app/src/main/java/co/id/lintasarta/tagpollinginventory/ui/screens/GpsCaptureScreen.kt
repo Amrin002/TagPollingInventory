@@ -85,9 +85,9 @@ fun GpsCaptureScreen(
     )
 
     val (qualityText, qualityColor, qualityBg) = when {
-        gpsAccuracy <= 5.0f -> Triple("GOOD FIX", Color(0xFF2E7D32), Color(0xFFE8F5E9))
-        gpsAccuracy <= 15.0f -> Triple("FAIR FIX", Color(0xFFEF6C00), Color(0xFFFFF3E0))
-        else -> Triple("POOR FIX", Color(0xFFC62828), Color(0xFFFFEBEE))
+        gpsAccuracy <= 5.0f -> Triple("FIX BAIK", Color(0xFF2E7D32), Color(0xFFE8F5E9))
+        gpsAccuracy <= 15.0f -> Triple("FIX CUKUP", Color(0xFFEF6C00), Color(0xFFFFF3E0))
+        else -> Triple("FIX BURUK", Color(0xFFC62828), Color(0xFFFFEBEE))
     }
 
     val timestampStr = remember(currentLocation.timestamp) {
@@ -95,16 +95,16 @@ fun GpsCaptureScreen(
     }
 
     val dynamicProvider = if (networkStatus.isOnline) {
-        "GPS + Cell/WiFi Triangulation (${networkStatus.connectionType})"
+        "GPS + Triangulasi Seluler/WiFi (${networkStatus.connectionType})"
     } else {
-        "GPS Hardware Only (Offline Local)"
+        "Hardware GPS Saja (Lokal Offline)"
     }
 
     Scaffold(
         topBar = {
             TopBar(
-                title = "GPS Capture",
-                subtitle = draftPole?.id ?: "Target Pole",
+                title = "Pengambilan GPS",
+                subtitle = draftPole?.id ?: "Target Tiang",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
             )
@@ -132,9 +132,9 @@ fun GpsCaptureScreen(
                     ) {
                         Icon(Icons.Default.Security, contentDescription = null, tint = Color(0xFFEF6C00), modifier = Modifier.size(36.dp))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("Location Permission Required", fontWeight = FontWeight.Bold, color = Color(0xFFEF6C00))
+                        Text("Izin Lokasi Diperlukan", fontWeight = FontWeight.Bold, color = Color(0xFFEF6C00))
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("Application needs GPS location permission to capture accurate pole coordinates.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                        Text("Aplikasi memerlukan izin lokasi GPS untuk mengambil koordinat tiang secara akurat.", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
                             onClick = {
@@ -147,7 +147,7 @@ fun GpsCaptureScreen(
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF6C00))
                         ) {
-                            Text("Grant Permission", fontWeight = FontWeight.Bold)
+                            Text("Berikan Izin", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -168,7 +168,7 @@ fun GpsCaptureScreen(
                         Icon(Icons.Default.LocationOn, contentDescription = null, tint = TelecomPrimary, modifier = Modifier.size(28.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
-                            Text("TARGET POLE ID", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Text("ID TIANG TARGET", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
                             Text(draftPole?.id ?: "P-019-019", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = TelecomPrimary)
                         }
                     }
@@ -269,13 +269,13 @@ fun GpsCaptureScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text("LIVE GPS COORDINATES & TELEMETRY", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                    Text("KOORDINAT GPS LANGSUNG & TELEMETRI", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
 
                     // Sampling Progress Bar
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Sampling Progress", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                            Text("${currentLocation.sampleCount} / ${currentLocation.targetSamples} Samples", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                            Text("Progres Sampling", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("${currentLocation.sampleCount} / ${currentLocation.targetSamples} Sampel", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
                         }
                         LinearProgressIndicator(
                             progress = { currentLocation.sampleCount.toFloat() / currentLocation.targetSamples.toFloat() },
@@ -290,54 +290,54 @@ fun GpsCaptureScreen(
                     HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = Color(0xFFEEEEEE))
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Latitude (Centroid)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Lintang (Centroid)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(String.format(Locale.US, "%.6f°", currentLocation.latitude), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Longitude (Centroid)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Bujur (Centroid)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(String.format(Locale.US, "%.6f°", currentLocation.longitude), fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Accuracy (p68)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text(String.format(Locale.US, "±%.1f meters", gpsAccuracy), fontWeight = FontWeight.Bold, color = qualityColor)
+                        Text("Akurasi (p68)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(String.format(Locale.US, "±%.1f meter", gpsAccuracy), fontWeight = FontWeight.Bold, color = qualityColor)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Sample Dispersion", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text(String.format(Locale.US, "±%.2f meters", currentLocation.sampleDispersionMeters), fontWeight = FontWeight.Bold, color = Color.DarkGray)
+                        Text("Dispersi Sampel", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(String.format(Locale.US, "±%.2f meter", currentLocation.sampleDispersionMeters), fontWeight = FontWeight.Bold, color = Color.DarkGray)
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = Color(0xFFEEEEEE))
 
                     // GnssStatus Telemetry Section
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Satellites (Used / Visible)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                        Text("${currentLocation.satellitesUsed} / ${currentLocation.satellitesVisible} Satellites", fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                        Text("Satelit (Digunakan / Terlihat)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("${currentLocation.satellitesUsed} / ${currentLocation.satellitesVisible} Satelit", fontWeight = FontWeight.Bold, color = TelecomPrimary)
                     }
 
                     if (currentLocation.constellations.isNotEmpty()) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Constellations", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Konstelasi", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(currentLocation.constellations.joinToString(", "), fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
                         }
                     }
 
                     if (currentLocation.avgCn0DbHz > 0) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Signal Strength (C/N0)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("Kekuatan Sinyal (C/N0)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             Text(String.format(Locale.US, "%.1f dBHz", currentLocation.avgCn0DbHz), fontWeight = FontWeight.Medium, style = MaterialTheme.typography.bodySmall, color = Color.DarkGray)
                         }
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Provider", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Penyedia", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(dynamicProvider, fontWeight = FontWeight.Medium, color = Color.DarkGray, style = MaterialTheme.typography.bodySmall)
                     }
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Fix Timestamp", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text("Waktu Fix", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                         Text(timestampStr, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                     }
                 }
@@ -380,7 +380,7 @@ fun GpsCaptureScreen(
             ) {
                 Icon(Icons.Default.GpsFixed, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Capture GPS Location", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Ambil Lokasi GPS", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
             }
@@ -395,7 +395,7 @@ fun GpsCaptureScreen(
             ) {
                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Refresh / Retry GPS Fix", fontWeight = FontWeight.Bold)
+                Text("Segarkan / Coba Ulang Fix GPS", fontWeight = FontWeight.Bold)
             }
         }
     }

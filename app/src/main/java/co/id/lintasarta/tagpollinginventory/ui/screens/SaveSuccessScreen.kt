@@ -69,7 +69,7 @@ fun SaveSuccessScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Text(
-            text = "✓ Pole Successfully Tagged",
+            text = "✓ Tiang Berhasil Ditag",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.ExtraBold,
             color = Color(0xFF2E7D32),
@@ -101,7 +101,7 @@ fun SaveSuccessScreen(
                     color = if (networkStatus.isOnline) Color(0xFFE8F5E9) else Color(0xFFE3F2FD)
                 ) {
                     Text(
-                        text = if (networkStatus.isOnline) "SAVED (WAITING SYNC)" else "LOCAL ONLY",
+                        text = if (networkStatus.isOnline) "TERSIMPAN (MENUNGGU SINKRONISASI)" else "HANYA LOKAL",
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
@@ -112,7 +112,7 @@ fun SaveSuccessScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = if (networkStatus.isOnline) "Data is saved locally and queued for server sync." else "Data has been saved locally. Connect to internet to sync.",
+                    text = if (networkStatus.isOnline) "Data disimpan secara lokal dan masuk antrean sinkronisasi server." else "Data telah disimpan secara lokal. Sambungkan ke internet untuk menyinkronkan.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = Color(0xFF37474F)
@@ -138,7 +138,7 @@ fun SaveSuccessScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Tag Next Pole",
+                text = "Tag Tiang Berikutnya",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -160,7 +160,7 @@ fun SaveSuccessScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "View Pole Details",
+                text = "Lihat Detail Tiang",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -181,7 +181,7 @@ fun SaveSuccessScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Back to Segment",
+                text = "Kembali ke Segment",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
