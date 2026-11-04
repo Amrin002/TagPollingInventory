@@ -1,8 +1,11 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.LocationOn
@@ -33,6 +36,7 @@ import java.util.Locale
 fun FieldMapScreen(
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
+    onQuickTagClick: (String) -> Unit = { poleId -> viewModel.startQuickTaggingForTargetPole(poleId) },
     onTagThisPoleClick: () -> Unit
 ) {
     val project by viewModel.project.collectAsState()
@@ -347,38 +351,71 @@ fun FieldMapScreen(
 
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFFF5F5F5),
+                        color = Color(0xFFF1F8E9),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "“Berdiri tepat di bawah tiang untuk mengambil koordinat secara akurat.”",
-                            modifier = Modifier.padding(10.dp),
+                            text = "Pilih mode survei. Gunakan Quick Tagging (< 1 Menit) untuk alur cepat 2-tahap.",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                             style = MaterialTheme.typography.bodySmall,
                             textAlign = TextAlign.Center,
-                            color = Color(0xFF455A64),
+                            color = Color(0xFF2E7D32),
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )
                     }
 
-                    Button(
-                        onClick = onTagThisPoleClick,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
-                        shape = RoundedCornerShape(12.dp)
+                    // Dual Action Survey Buttons: Quick Tagging (Diutamakan) & Tag Polling PM
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.GpsFixed,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Tag Tiang Ini",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // 1. UTAMA (PRIORITAS): Quick Tagging (< 1 Menit)
+                        Button(
+                            onClick = { onQuickTagClick(targetPole?.id ?: "") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)), // Teal Signature Quick Tagging
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Quick Tagging (< 1 Menit)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+
+                        // 2. SEKUNDER: Tag Polling PM (Form Lengkap)
+                        OutlinedButton(
+                            onClick = onTagThisPoleClick,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.5.dp, TelecomPrimary),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = TelecomPrimary
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Assignment,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Tag Polling PM (Form Lengkap)",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

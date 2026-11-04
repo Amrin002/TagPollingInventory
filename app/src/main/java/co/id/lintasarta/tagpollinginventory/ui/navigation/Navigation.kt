@@ -163,7 +163,7 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                         )
                         AppTab.SEGMENTS -> SegmentExplorerScreen(
                             viewModel = viewModel,
-                            onSegmentSelected = { segId -> viewModel.startQuickTaggingForSegment(segId) }
+                            onSegmentSelected = { segId -> viewModel.selectSegment(segId, navigateToDetail = true) }
                         )
                         AppTab.MAP -> AreaOverviewMapScreen(
                             viewModel = viewModel,
@@ -209,6 +209,7 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                 ScreenFlow.FIELD_MAP -> FieldMapScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() },
+                    onQuickTagClick = { poleId -> viewModel.startQuickTaggingForTargetPole(poleId) },
                     onTagThisPoleClick = { viewModel.proceedToGpsCapture() }
                 )
 

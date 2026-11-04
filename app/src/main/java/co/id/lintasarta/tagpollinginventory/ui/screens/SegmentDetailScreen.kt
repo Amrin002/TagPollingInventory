@@ -271,7 +271,11 @@ fun SegmentDetailScreen(
                         // Tombol 1: Quick Tagging (< 1 Menit)
                         Button(
                             onClick = {
-                                viewModel.startQuickTaggingForSegment(activeSegment.id)
+                                if (targetPoleId.isNotEmpty()) {
+                                    viewModel.startQuickTaggingForTargetPole(targetPoleId)
+                                } else {
+                                    viewModel.startQuickTaggingForSegment(activeSegment.id)
+                                }
                             },
                             modifier = Modifier
                                 .weight(1f)

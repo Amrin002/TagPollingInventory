@@ -159,6 +159,28 @@ fun QuickTaggingSessionScreen(
         onBackClick()
     }
 
+    // Sync Screen State saat draftPole aktif berubah atau ditargetkan dari Peta
+    LaunchedEffect(draftPole?.id) {
+        val pole = draftPole
+        if (pole != null) {
+            selectedAssetClass = pole.assetClass.ifEmpty { "pole_9" }
+            if (pole.isExistingPole || pole.effectiveAssetUid.startsWith("POL-")) {
+                isUsingExistingPole = true
+            }
+            if (pole.latitude != 0.0 && pole.longitude != 0.0 && correctedLat == null) {
+                capturedOriginalLat = pole.rawLatitude?.takeIf { it != 0.0 } ?: pole.latitude
+                capturedOriginalLng = pole.rawLongitude?.takeIf { it != 0.0 } ?: pole.longitude
+                correctedLat = pole.latitude
+                correctedLng = pole.longitude
+                gpsState = QuickGpsState.READY
+            }
+            if (!pole.photoPath.isNullOrEmpty() && capturedPhotoPath == null) {
+                capturedPhotoPath = pole.photoPath
+                capturedPhotoSha256 = pole.photoSha256
+            }
+        }
+    }
+
     // Monitor GPS during SEARCHING state & Auto-Lock saat akurasi <= 8m (Hijau)
     LaunchedEffect(gpsState, currentLocation) {
         if (gpsState == QuickGpsState.SEARCHING) {

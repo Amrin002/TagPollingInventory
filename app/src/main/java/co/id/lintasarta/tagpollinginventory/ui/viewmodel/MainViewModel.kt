@@ -587,6 +587,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         navigateTo(ScreenFlow.QUICK_TAGGING_SESSION)
     }
 
+    fun startQuickTaggingForTargetPole(poleId: String? = null) {
+        _isQuickTaggingMode.value = true
+        val targetId = if (!poleId.isNullOrEmpty()) poleId else targetPoleId.value
+        if (!targetId.isNullOrEmpty()) {
+            repository.setTargetPole(targetId)
+            repository.startDraftForPole(targetId)
+        } else {
+            prepareNewPoleForQuickTagging(selectedSegmentId.value)
+        }
+        navigateTo(ScreenFlow.QUICK_TAGGING_SESSION)
+    }
+
     fun startPmSurveyForSegment(segmentId: String) {
         _isQuickTaggingMode.value = false
         selectSegment(segmentId, navigateToDetail = false)
@@ -667,7 +679,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun exitQuickTagging() {
         _isQuickTaggingMode.value = false
         stopLocationUpdates()
-        navigateTo(ScreenFlow.TAB_ROOT, clearStack = true)
+        if (screenStack.isNotEmpty()) {
+            navigateBack()
+        } else {
+            navigateTo(ScreenFlow.TAB_ROOT, clearStack = true)
+        }
     }
 
     fun markActiveSegmentCompleted() {
