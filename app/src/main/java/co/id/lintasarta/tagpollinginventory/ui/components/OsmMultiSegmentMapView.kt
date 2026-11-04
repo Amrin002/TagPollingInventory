@@ -1,8 +1,8 @@
 package co.id.lintasarta.tagpollinginventory.ui.components
 
+import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.graphics.drawable.GradientDrawable
-import android.preference.PreferenceManager
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -42,7 +42,7 @@ fun OsmMultiSegmentMapView(
     val mapView = remember {
         val osmdroidDir = File(context.filesDir, "osmdroid").apply { if (!exists()) mkdirs() }
         val tilesDir = File(osmdroidDir, "tiles").apply { if (!exists()) mkdirs() }
-        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+        val prefs = context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
         Configuration.getInstance().load(context, prefs)
         Configuration.getInstance().userAgentValue = context.packageName
         Configuration.getInstance().osmdroidBasePath = osmdroidDir

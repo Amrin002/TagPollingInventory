@@ -65,9 +65,9 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
             ),
             NavTabItem(
                 tab = AppTab.MAP,
-                label = "Tagging",
-                activeIcon = Icons.Filled.AddLocationAlt,
-                inactiveIcon = Icons.Outlined.AddLocationAlt
+                label = "Peta",
+                activeIcon = Icons.Filled.Map,
+                inactiveIcon = Icons.Outlined.Map
             ),
             NavTabItem(
                 tab = AppTab.EXPORT,
@@ -165,20 +165,11 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                             viewModel = viewModel,
                             onSegmentSelected = { segId -> viewModel.startQuickTaggingForSegment(segId) }
                         )
-                        AppTab.MAP -> {
-                            val activeSegId by viewModel.selectedSegmentId.collectAsState()
-                            if (activeSegId.isNotBlank()) {
-                                QuickTaggingSessionScreen(
-                                    viewModel = viewModel,
-                                    onBackClick = { viewModel.switchTab(AppTab.SEGMENTS) }
-                                )
-                            } else {
-                                SegmentExplorerScreen(
-                                    viewModel = viewModel,
-                                    onSegmentSelected = { segId -> viewModel.startQuickTaggingForSegment(segId) }
-                                )
-                            }
-                        }
+                        AppTab.MAP -> AreaOverviewMapScreen(
+                            viewModel = viewModel,
+                            onNavigateToSurvey = { segId -> viewModel.startQuickTaggingForSegment(segId) },
+                            onNavigateToDetail = { segId -> viewModel.selectSegment(segId, navigateToDetail = true) }
+                        )
                         AppTab.EXPORT -> ReviewExportSyncScreen(
                             viewModel = viewModel,
                             onNavigateToTagging = { segId -> viewModel.startQuickTaggingForSegment(segId) }

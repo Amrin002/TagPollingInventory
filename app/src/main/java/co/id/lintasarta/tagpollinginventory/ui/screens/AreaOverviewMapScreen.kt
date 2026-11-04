@@ -8,16 +8,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.id.lintasarta.tagpollinginventory.data.model.RouteCoordinate
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
+import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
 import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.components.OsmMultiSegmentMapView
 import co.id.lintasarta.tagpollinginventory.ui.components.SegmentStatusBadge
@@ -25,7 +29,18 @@ import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
+import java.util.Locale
 
+/**
+ * LAYAR PETA SEBARAN SEGMEN (Area Overview Map Screen)
+ * Menu Utama di Tengah (Tab Peta)
+ *
+ * Fitur:
+ * 1. Menampilkan seluruh 143 rute kabel fiber optic di Area 18 MPO (OpenStreetMap).
+ * 2. Chip Filter di bagian atas: "Semua Rute", Rute Prioritas Alpaca (Sentani-Abepura, Manokwari, Timika, Sorong, Dobo, Tiakur), dan Kota-kota hub (Jayapura, Ambon, Merauke, Biak, Nabire, Tual).
+ * 3. Interaktif: Klik rute/marker untuk membuka Bottom Sheet ringkasan segmen & 1-tap "Mulai Quick Tagging Tiang".
+ * 4. Kontrol Mengambang: Tombol Lokasi Saya (GPS Auto-Center) & Zoom Controls.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AreaOverviewMapScreen(
@@ -33,52 +48,118 @@ fun AreaOverviewMapScreen(
     onNavigateToSurvey: (String) -> Unit,
     onNavigateToDetail: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val project by viewModel.project.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
 
-    var selectedCity by remember { mutableStateOf("Semua") }
+    var selectedFilterKey by remember { mutableStateOf("SEMUA") }
     var selectedSegment by remember { mutableStateOf<Segment?>(null) }
     var osmMapViewInstance by remember { mutableStateOf<MapView?>(null) }
 
-    // Normalisasi kota untuk mengelompokkan 143 rute MPO
-    fun getNormalizedCity(seg: Segment): String {
-        val text = "${seg.description} ${seg.route} ${seg.name}".lowercase()
-        return when {
-            text.contains("jayapura") || text.contains("jyp") -> "Jayapura"
-            text.contains("mimika") || text.contains("timika") || text.contains("tmk") -> "Timika"
-            text.contains("ambon") || text.contains("amb") -> "Ambon"
-            text.contains("sorong") || text.contains("srn") -> "Sorong"
-            text.contains("manokwari") || text.contains("mwr") -> "Manokwari"
-            text.contains("merauke") || text.contains("mrk") -> "Merauke"
-            text.contains("biak") || text.contains("bik") -> "Biak"
-            text.contains("nabire") || text.contains("nbr") -> "Nabire"
-            text.contains("tual") || text.contains("tla") -> "Tual"
-            text.contains("tanimbar") || text.contains("saumlaki") -> "Tanimbar"
-            text.contains("aru") || text.contains("dobo") -> "Kep. Aru"
-            else -> "Lainnya"
-        }
-    }
-
+    // Seluruh segmen: Ambil dari Room project.segments dengan fallback parsing mpo_segments.json
     val allSegments = remember(project.segments) {
-        project.segments
-    }
-
-    // Hitung distribusi kota unik
-    val cityGroups = remember(allSegments) {
-        val counts = allSegments.groupBy { getNormalizedCity(it) }
-        val prioritized = listOf("Semua", "Jayapura", "Timika", "Ambon", "Sorong", "Manokwari", "Merauke", "Biak", "Nabire", "Tual")
-        val available = counts.keys.filter { it !in prioritized }.sorted()
-        (prioritized + available).filter { it == "Semua" || (counts[it]?.isNotEmpty() == true) }
-    }
-
-    val filteredSegments = remember(allSegments, selectedCity) {
-        if (selectedCity == "Semua") {
-            allSegments
+        if (project.segments.isNotEmpty()) {
+            project.segments
         } else {
-            allSegments.filter { getNormalizedCity(it) == selectedCity }
+            val bundledDtos = RnimsApiClient.loadBundledMpoSegments(context)
+            bundledDtos.map { dto ->
+                val coords = dto.route_path?.map { RouteCoordinate(it.lng, it.lat) } ?: emptyList()
+                val cityCode = dto.org_site?.take(3)?.uppercase() ?: "TMK"
+                val locationCode = dto.dst_site?.take(3)?.uppercase() ?: "PMK"
+                val cityFilter = when {
+                    dto.org_city?.contains("Jayapura", true) == true || dto.segment_name.contains("Sentani", true) || dto.segment_name.contains("Abepura", true) -> "JAYAPURA"
+                    dto.org_city?.contains("Mimika", true) == true || dto.segment_name.contains("Timika", true) -> "TIMIKA"
+                    dto.org_city?.contains("Sorong", true) == true || dto.segment_name.contains("Sorong", true) -> "SORONG"
+                    dto.org_city?.contains("Manokwari", true) == true || dto.segment_name.contains("Manokwari", true) -> "MANOKWARI"
+                    dto.org_city?.contains("Ambon", true) == true || dto.segment_name.contains("Ambon", true) -> "AMBON"
+                    dto.org_city?.contains("Merauke", true) == true || dto.segment_name.contains("Merauke", true) -> "MERAUKE"
+                    dto.org_city?.contains("Biak", true) == true || dto.segment_name.contains("Biak", true) -> "BIAK"
+                    dto.org_city?.contains("Nabire", true) == true || dto.segment_name.contains("Nabire", true) -> "NABIRE"
+                    dto.org_city?.contains("Tual", true) == true || dto.segment_name.contains("Tual", true) -> "TUAL"
+                    dto.segment_name.contains("Aru", true) || dto.segment_name.contains("Dobo", true) -> "DOBO"
+                    dto.segment_name.contains("Tiakur", true) || dto.segment_name.contains("Tanimbar", true) -> "TIAKUR"
+                    else -> "LAINNYA"
+                }
+
+                val priorityKey = when {
+                    dto.segment_name.contains("Sentani", true) || dto.segment_name.contains("Abepura", true) -> "SENTANI_ABEPURA"
+                    dto.segment_name.contains("Manokwari", true) -> "MANOKWARI"
+                    dto.segment_name.contains("Timika", true) -> "TIMIKA"
+                    dto.segment_name.contains("Sorong", true) -> "SORONG"
+                    dto.segment_name.contains("Dobo", true) -> "DOBO"
+                    dto.segment_name.contains("Tiakur", true) -> "TIAKUR"
+                    else -> ""
+                }
+
+                Segment(
+                    id = "SEG-${dto.id}",
+                    name = dto.segment_name,
+                    lengthMeters = dto.distance.toDouble(),
+                    routeCoordinates = coords,
+                    areaId = 18,
+                    orgSite = dto.org_site ?: "",
+                    dstSite = dto.dst_site ?: "",
+                    orgCity = dto.org_city ?: "",
+                    dstCity = dto.dst_city ?: "",
+                    cityFilterKey = cityFilter,
+                    priorityRouteKey = priorityKey,
+                    isAlpacaProject = true,
+                    route = "${dto.org_site} -> ${dto.dst_site}",
+                    projectId = "PRJ-MPO-18",
+                    description = "Segmen FO ${dto.org_site} - ${dto.dst_site}",
+                    status = SegmentStatus.NOT_STARTED
+                )
+            }
         }
+    }
+
+    // Normalisasi kota & rute untuk mengelompokkan segmen
+    fun matchesFilter(seg: Segment, filterKey: String): Boolean {
+        if (filterKey == "SEMUA") return true
+        if (seg.priorityRouteKey.equals(filterKey, ignoreCase = true)) return true
+        if (seg.cityFilterKey.equals(filterKey, ignoreCase = true)) return true
+
+        val text = "${seg.name} ${seg.description} ${seg.route} ${seg.cityFilterKey} ${seg.priorityRouteKey}".uppercase()
+        return when (filterKey) {
+            "SENTANI_ABEPURA" -> text.contains("SENTANI") || text.contains("ABEPURA")
+            "TIMIKA" -> text.contains("TIMIKA") || text.contains("MIMIKA") || text.contains("TMK")
+            "MANOKWARI" -> text.contains("MANOKWARI") || text.contains("MWR")
+            "SORONG" -> text.contains("SORONG") || text.contains("SRN")
+            "DOBO" -> text.contains("DOBO") || text.contains("ARU")
+            "TIAKUR" -> text.contains("TIAKUR") || text.contains("MBD") || text.contains("TANIMBAR")
+            "JAYAPURA" -> text.contains("JAYAPURA") || text.contains("JPR")
+            "AMBON" -> text.contains("AMBON") || text.contains("AMB")
+            "MERAUKE" -> text.contains("MERAUKE") || text.contains("MRK")
+            "BIAK" -> text.contains("BIAK") || text.contains("BIK")
+            "NABIRE" -> text.contains("NABIRE") || text.contains("NBR")
+            "TUAL" -> text.contains("TUAL") || text.contains("TLA")
+            else -> false
+        }
+    }
+
+    // Filter Chips: Rute Prioritas Alpaca & Kota Utama MPO
+    val filterChipOptions = remember {
+        listOf(
+            "SEMUA" to "Semua Rute",
+            "SENTANI_ABEPURA" to "Sentani - Abepura",
+            "TIMIKA" to "Timika",
+            "MANOKWARI" to "Manokwari",
+            "SORONG" to "Sorong",
+            "JAYAPURA" to "Jayapura",
+            "AMBON" to "Ambon",
+            "MERAUKE" to "Merauke",
+            "BIAK" to "Biak",
+            "NABIRE" to "Nabire",
+            "TUAL" to "Tual",
+            "DOBO" to "Dobo (Aru)",
+            "TIAKUR" to "Tiakur"
+        )
+    }
+
+    val filteredSegments = remember(allSegments, selectedFilterKey) {
+        allSegments.filter { matchesFilter(it, selectedFilterKey) }
     }
 
     Scaffold(
@@ -92,19 +173,28 @@ fun AreaOverviewMapScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Map,
+                                contentDescription = null,
+                                tint = Color(0xFF64B5F6),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Peta Sebaran Rute FO",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White
+                            )
+                        }
                         Text(
-                            text = "Peta Sebaran Segmen",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "Area ${currentUser.areaId} (${currentUser.areaLabel}) • ${filteredSegments.size} Rute Fiber Optic",
+                            text = "Area 18 MPO • ${filteredSegments.size} dari ${allSegments.size} Rute Segmen",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
@@ -120,11 +210,11 @@ fun AreaOverviewMapScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // 1. Kanvas OpenStreetMap Multi-Segmen
+            // 1. KANVAS OPENSTREETMAP MULTI-SEGMEN
             OsmMultiSegmentMapView(
                 segments = filteredSegments,
                 selectedSegmentId = selectedSegment?.id,
-                selectedCity = selectedCity,
+                selectedCity = selectedFilterKey,
                 userLocation = currentLocation,
                 onSegmentClick = { seg ->
                     selectedSegment = seg
@@ -135,49 +225,61 @@ fun AreaOverviewMapScreen(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // 2. Chip Filter Kota (Horizontal Scroll) di Bagian Atas Peta
+            // 2. CHIP FILTER DI BAGIAN ATAS PETA (HORIZONTAL SCROLL)
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                color = Color.White.copy(alpha = 0.95f),
-                shape = RoundedCornerShape(24.dp),
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                color = Color.White.copy(alpha = 0.94f),
+                shape = RoundedCornerShape(20.dp),
                 shadowElevation = 6.dp
             ) {
                 Row(
                     modifier = Modifier
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    cityGroups.forEach { city ->
-                        val count = if (city == "Semua") allSegments.size else allSegments.count { getNormalizedCity(it) == city }
-                        val isSelected = selectedCity == city
+                    filterChipOptions.forEach { (key, label) ->
+                        val count = if (key == "SEMUA") allSegments.size else allSegments.count { matchesFilter(it, key) }
+                        if (count > 0 || key == "SEMUA") {
+                            val isSelected = selectedFilterKey == key
 
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = {
-                                selectedCity = city
-                                selectedSegment = null
-                            },
-                            label = {
-                                Text(
-                                    text = "$city ($count)",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = {
+                                    selectedFilterKey = key
+                                    selectedSegment = null
+                                },
+                                label = {
+                                    Text(
+                                        text = "$label ($count)",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                                    )
+                                },
+                                leadingIcon = if (key == "SENTANI_ABEPURA" || key == "TIMIKA" || key == "MANOKWARI" || key == "SORONG") {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Default.Star,
+                                            contentDescription = "Prioritas Alpaca",
+                                            tint = if (isSelected) Color.White else Color(0xFFFFB300),
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                } else null,
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = TelecomPrimary,
+                                    selectedLabelColor = Color.White
                                 )
-                            },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = TelecomPrimary,
-                                selectedLabelColor = Color.White
                             )
-                        )
+                        }
                     }
                 }
             }
 
-            // 3. Mini Legenda Status Peta (Pojok Kiri Bawah)
+            // 3. MINI LEGENDA STATUS PETA (Pojok Kiri Bawah)
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -220,7 +322,7 @@ fun AreaOverviewMapScreen(
                 }
             }
 
-            // 4. Tombol Kontrol Peta Mengambang (Pojok Kanan Bawah)
+            // 4. TOMBOL KONTROL PETA MENGAMBANG (Pojok Kanan Bawah)
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -272,7 +374,7 @@ fun AreaOverviewMapScreen(
                 }
             }
 
-            // 5. Bottom Sheet Ringkasan Segmen saat Rute Diketuk
+            // 5. BOTTOM SHEET RINGKASAN SEGMEN SAAT RUTE DIKETUK
             selectedSegment?.let { segment ->
                 ModalBottomSheet(
                     onDismissRequest = { selectedSegment = null },
@@ -296,7 +398,7 @@ fun AreaOverviewMapScreen(
                                 Text(
                                     text = segment.name,
                                     style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.ExtraBold,
                                     color = TelecomPrimary
                                 )
                                 Text(
@@ -321,16 +423,16 @@ fun AreaOverviewMapScreen(
                                 horizontalArrangement = Arrangement.SpaceAround
                             ) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Wilayah Kota", fontSize = 11.sp, color = Color.Gray)
+                                    Text("Wilayah", fontSize = 11.sp, color = Color.Gray)
                                     Text(
-                                        text = getNormalizedCity(segment),
+                                        text = segment.cityFilterKey.ifEmpty { "Area 18" },
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("Panjang Rute", fontSize = 11.sp, color = Color.Gray)
-                                    val dist = String.format(java.util.Locale.US, "%.1f", (segment.routeCoordinates.size * 0.05).coerceAtLeast(1.0))
+                                    val dist = String.format(Locale.US, "%.1f", (segment.routeCoordinates.size * 0.05).coerceAtLeast(1.0))
                                     Text(
                                         text = "$dist km",
                                         fontWeight = FontWeight.Bold,
@@ -349,34 +451,39 @@ fun AreaOverviewMapScreen(
                             }
                         }
 
-                        // Tombol Aksi Langsung
+                        // TOMBOL AKSI 1: MULAI QUICK TAGGING TIANG
                         Button(
                             onClick = {
                                 val segId = segment.id
                                 selectedSegment = null
                                 onNavigateToSurvey(segId)
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.AddLocationAlt, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Mulai Survei PM Tiang", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Mulai Quick Tagging Tiang (< 1 Menit)", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                         }
 
+                        // TOMBOL AKSI 2: LIHAT DETAIL SEGMEN
                         OutlinedButton(
                             onClick = {
                                 val segId = segment.id
                                 selectedSegment = null
                                 onNavigateToDetail(segId)
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(Icons.Default.Info, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Lihat Detail Segmen & Tiang")
+                            Text("Lihat Detail Segmen & Tiang", fontWeight = FontWeight.Bold)
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
