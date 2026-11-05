@@ -206,6 +206,14 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                     onStartTagging = { poleId -> viewModel.startTaggingPole(poleId) }
                 )
 
+                ScreenFlow.POLE_DETAIL -> PoleDetailScreen(
+                    viewModel = viewModel,
+                    onBackClick = { viewModel.navigateBack() },
+                    onRetagQuickTagging = { poleId -> viewModel.startQuickTaggingForTargetPole(poleId) },
+                    onRetagPmSurvey = { poleId -> viewModel.startTaggingPole(poleId) },
+                    onOpenInFieldMap = { poleId -> viewModel.startTaggingPole(poleId) }
+                )
+
                 ScreenFlow.FIELD_MAP -> FieldMapScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() },
@@ -247,7 +255,7 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
                 ScreenFlow.INVENTORY_LIST -> PoleInventoryListScreen(
                     viewModel = viewModel,
                     onBackClick = { viewModel.navigateBack() },
-                    onPoleClick = { poleId -> viewModel.startTaggingPole(poleId) }
+                    onPoleClick = { poleId -> viewModel.openPoleDetail(poleId) }
                 )
 
                 ScreenFlow.EXPORT_OPTIONS -> ExportCenterScreen(

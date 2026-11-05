@@ -225,7 +225,7 @@ fun SegmentDetailScreen(
                     selectedPoleId = targetPoleId,
                     userLocation = currentLocation,
                     onPoleClick = { pole ->
-                        viewModel.startTaggingPole(pole.id)
+                        viewModel.openPoleDetail(pole.id)
                     },
                     modifier = Modifier.fillMaxSize()
                 )
@@ -440,7 +440,7 @@ fun SegmentDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    viewModel.startTaggingPole(pole.id)
+                                    viewModel.openPoleDetail(pole.id)
                                 },
                             shape = RoundedCornerShape(10.dp),
                             colors = CardDefaults.cardColors(containerColor = Color.White),

@@ -353,39 +353,39 @@ fun PhotoCaptureScreenContent(
 
                             val overlayColor = if (isDeviceLevel) Color(0xFF4CAF50) else Color(0xFFFF9800)
 
-                            // Outer Corridor Box
-                            drawRect(
-                                color = overlayColor.copy(alpha = 0.6f),
-                                topLeft = Offset(left, top),
-                                size = Size(boxW, boxH),
-                                style = Stroke(width = 3f)
-                            )
+                            val bracketLen = 32f
+                            val strokeW = 3f
 
-                            // Vertical Centre Line
+                            // Sleek Corner Reticle Brackets (┌ ┐ dan └ ┘)
+                            // Top-Left
+                            drawLine(overlayColor, Offset(left, top), Offset(left + bracketLen, top), strokeW)
+                            drawLine(overlayColor, Offset(left, top), Offset(left, top + bracketLen), strokeW)
+                            // Top-Right
+                            drawLine(overlayColor, Offset(left + boxW, top), Offset(left + boxW - bracketLen, top), strokeW)
+                            drawLine(overlayColor, Offset(left + boxW, top), Offset(left + boxW, top + bracketLen), strokeW)
+                            // Bottom-Left
+                            drawLine(overlayColor, Offset(left, top + boxH), Offset(left + bracketLen, top + boxH), strokeW)
+                            drawLine(overlayColor, Offset(left, top + boxH), Offset(left, top + boxH - bracketLen), strokeW)
+                            // Bottom-Right
+                            drawLine(overlayColor, Offset(left + boxW, top + boxH), Offset(left + boxW - bracketLen, top + boxH), strokeW)
+                            drawLine(overlayColor, Offset(left + boxW, top + boxH), Offset(left + boxW, top + boxH - bracketLen), strokeW)
+
+                            // Subtle Hairline Center Line
                             drawLine(
-                                color = overlayColor.copy(alpha = 0.8f),
-                                start = Offset(w / 2, top),
-                                end = Offset(w / 2, top + boxH),
-                                strokeWidth = 2f
+                                color = Color.White.copy(alpha = 0.30f),
+                                start = Offset(w / 2, top + 16f),
+                                end = Offset(w / 2, top + boxH - 16f),
+                                strokeWidth = 1.5f
                             )
 
-                            // Top Safe Area Marker
+                            // Safe Area Limit Ticks (Headroom & Ground)
+                            val tickLen = 14f
                             val topAreaY = top + boxH * 0.15f
-                            drawLine(
-                                color = Color.White.copy(alpha = 0.7f),
-                                start = Offset(left, topAreaY),
-                                end = Offset(left + boxW, topAreaY),
-                                strokeWidth = 2f
-                            )
-
-                            // Base Safe Area Marker
                             val baseAreaY = top + boxH * 0.85f
-                            drawLine(
-                                color = Color.White.copy(alpha = 0.7f),
-                                start = Offset(left, baseAreaY),
-                                end = Offset(left + boxW, baseAreaY),
-                                strokeWidth = 2f
-                            )
+                            drawLine(overlayColor.copy(alpha = 0.5f), Offset(left - 4f, topAreaY), Offset(left + tickLen, topAreaY), 2f)
+                            drawLine(overlayColor.copy(alpha = 0.5f), Offset(left + boxW - tickLen, topAreaY), Offset(left + boxW + 4f, topAreaY), 2f)
+                            drawLine(overlayColor.copy(alpha = 0.5f), Offset(left - 4f, baseAreaY), Offset(left + tickLen, baseAreaY), 2f)
+                            drawLine(overlayColor.copy(alpha = 0.5f), Offset(left + boxW - tickLen, baseAreaY), Offset(left + boxW + 4f, baseAreaY), 2f)
                         }
 
                         // Badges Overlay (Top-Left)

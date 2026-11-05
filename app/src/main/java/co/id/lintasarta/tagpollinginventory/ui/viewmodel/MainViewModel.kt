@@ -50,6 +50,7 @@ enum class ScreenFlow {
     LOGIN,
     CREATE_SEGMENT,
     SEGMENT_DETAIL,
+    POLE_DETAIL,
     FIELD_MAP,
     GPS_CAPTURE,
     POLE_INFO,
@@ -103,6 +104,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val poles = repository.poles
     val exportFiles = repository.exportFiles
     val currentDraftPole = repository.currentDraftPole
+
+    private val _selectedPoleDetailId = MutableStateFlow<String?>(null)
+    val selectedPoleDetailId: StateFlow<String?> = _selectedPoleDetailId.asStateFlow()
+
+    val selectedPoleDetail: StateFlow<Pole?> = combine(_selectedPoleDetailId, repository.poles) { id, polesMap ->
+        if (id != null) polesMap[id] else null
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _pendingPhotoPath = MutableStateFlow<String?>(null)
     val pendingPhotoPath: StateFlow<String?> = _pendingPhotoPath.asStateFlow()
@@ -775,6 +783,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newPole = repository.createNewPoleInSegment(segId, loc.latitude, loc.longitude)
         repository.startDraftForPole(newPole.id)
         navigateTo(ScreenFlow.FIELD_MAP)
+    }
+
+    fun openPoleDetail(poleId: String) {
+        _selectedPoleDetailId.value = poleId
+        repository.setTargetPole(poleId)
+        navigateTo(ScreenFlow.POLE_DETAIL)
     }
 
     fun startTaggingPole(poleId: String) {

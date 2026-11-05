@@ -1543,7 +1543,8 @@ fun QuickCameraOverlay(
 }
 
 /**
- * Komponen Siluet Vertikal Tiang Sesuai POLE_INVENTORY_ARCHITECTURE.md (Non-AR Visual Framing)
+ * Komponen Siluet Vertikal Tiang Sesuai POLE_INVENTORY_ARCHITECTURE.md (Minimalist Non-AR Framing Reticle)
+ * Didesain ergonomis dan ramping agar tidak menutupi visual lapangan tiang dan kabel optik.
  */
 @Composable
 fun VerticalPoleSilhouetteOverlay(
@@ -1556,110 +1557,76 @@ fun VerticalPoleSilhouetteOverlay(
             val canvasHeight = size.height
             val centerX = canvasWidth / 2f
 
-            val topSafeY = canvasHeight * 0.14f
+            val corridorWidth = canvasWidth * 0.36f
+            val left = (canvasWidth - corridorWidth) / 2f
+            val right = left + corridorWidth
+            val topSafeY = canvasHeight * 0.16f
             val bottomSafeY = canvasHeight * 0.78f
 
             val frameColor = if (isPhoneUpright) Color(0xFF00E676) else Color(0xFFFFB300)
+            val bracketLen = 32f
+            val strokeW = 3f
 
-            // Garis Batas Puncak Tiang (Top Margin ~14%)
+            // 1. Sleek Corner Reticle Brackets (┌ ┐ dan └ ┘)
+            // Top-Left Corner
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(left, topSafeY), androidx.compose.ui.geometry.Offset(left + bracketLen, topSafeY), strokeW)
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(left, topSafeY), androidx.compose.ui.geometry.Offset(left, topSafeY + bracketLen), strokeW)
+
+            // Top-Right Corner
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(right, topSafeY), androidx.compose.ui.geometry.Offset(right - bracketLen, topSafeY), strokeW)
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(right, topSafeY), androidx.compose.ui.geometry.Offset(right, topSafeY + bracketLen), strokeW)
+
+            // Bottom-Left Corner
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(left, bottomSafeY), androidx.compose.ui.geometry.Offset(left + bracketLen, bottomSafeY), strokeW)
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(left, bottomSafeY), androidx.compose.ui.geometry.Offset(left, bottomSafeY - bracketLen), strokeW)
+
+            // Bottom-Right Corner
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(right, bottomSafeY), androidx.compose.ui.geometry.Offset(right - bracketLen, bottomSafeY), strokeW)
+            drawLine(frameColor, androidx.compose.ui.geometry.Offset(right, bottomSafeY), androidx.compose.ui.geometry.Offset(right, bottomSafeY - bracketLen), strokeW)
+
+            // 2. Subtle Hairline Centerline (Unobtrusive)
             drawLine(
-                color = frameColor,
-                start = androidx.compose.ui.geometry.Offset(centerX - 90f, topSafeY),
-                end = androidx.compose.ui.geometry.Offset(centerX + 90f, topSafeY),
-                strokeWidth = 3f
+                color = Color.White.copy(alpha = 0.30f),
+                start = androidx.compose.ui.geometry.Offset(centerX, topSafeY + 16f),
+                end = androidx.compose.ui.geometry.Offset(centerX, bottomSafeY - 16f),
+                strokeWidth = 1.5f
             )
 
-            // Garis Batas Pangkal Tiang / Tanah (Bottom Margin ~78%)
-            drawLine(
-                color = frameColor,
-                start = androidx.compose.ui.geometry.Offset(centerX - 90f, bottomSafeY),
-                end = androidx.compose.ui.geometry.Offset(centerX + 90f, bottomSafeY),
-                strokeWidth = 3f
-            )
+            // 3. Subtle Safe Zone Boundary Ticks (Headroom & Ground level)
+            val tickLen = 14f
+            val topTickY = topSafeY + (bottomSafeY - topSafeY) * 0.12f
+            val bottomTickY = bottomSafeY - (bottomSafeY - topSafeY) * 0.12f
 
-            // Garis Vertikal Tengah Panduan
-            drawLine(
-                color = Color.White.copy(alpha = 0.5f),
-                start = androidx.compose.ui.geometry.Offset(centerX, topSafeY),
-                end = androidx.compose.ui.geometry.Offset(centerX, bottomSafeY),
-                strokeWidth = 2f
-            )
+            drawLine(frameColor.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(left - 4f, topTickY), androidx.compose.ui.geometry.Offset(left + tickLen, topTickY), 2f)
+            drawLine(frameColor.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(right - tickLen, topTickY), androidx.compose.ui.geometry.Offset(right + 4f, topTickY), 2f)
 
-            // Siluet Batang Tiang
-            val shaftW = 28f
-            drawRect(
-                color = frameColor.copy(alpha = 0.35f),
-                topLeft = androidx.compose.ui.geometry.Offset(centerX - shaftW / 2, topSafeY + 25f),
-                size = androidx.compose.ui.geometry.Size(shaftW, bottomSafeY - topSafeY - 25f),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5f)
-            )
-
-            // Siluet Breket / Crossarm Atas
-            drawRect(
-                color = frameColor.copy(alpha = 0.45f),
-                topLeft = androidx.compose.ui.geometry.Offset(centerX - 65f, topSafeY + 40f),
-                size = androidx.compose.ui.geometry.Size(130f, 12f),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
-            )
+            drawLine(frameColor.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(left - 4f, bottomTickY), androidx.compose.ui.geometry.Offset(left + tickLen, bottomTickY), 2f)
+            drawLine(frameColor.copy(alpha = 0.5f), androidx.compose.ui.geometry.Offset(right - tickLen, bottomTickY), androidx.compose.ui.geometry.Offset(right + 4f, bottomTickY), 2f)
         }
 
-        // Label Puncak
+        // Single Minimalist Indicator Pill positioned safely at top (unobtrusive, outside framing corridor)
         Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = Color.Black.copy(alpha = 0.65f),
+            shape = RoundedCornerShape(16.dp),
+            color = Color.Black.copy(alpha = 0.60f),
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 85.dp)
-        ) {
-            Text(
-                text = "▲ PUNCAK TIANG (TOP SAFE ZONE)",
-                color = if (isPhoneUpright) Color(0xFF00E676) else Color(0xFFFFB300),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-            )
-        }
-
-        // Label Pangkal
-        Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = Color.Black.copy(alpha = 0.65f),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 150.dp)
-        ) {
-            Text(
-                text = "▼ PANGKAL TIANG / TANAH (BASE SAFE ZONE)",
-                color = if (isPhoneUpright) Color(0xFF00E676) else Color(0xFFFFB300),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-            )
-        }
-
-        // Petunjuk Leveling & Jarak
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = Color.Black.copy(alpha = 0.70f),
-            modifier = Modifier
-                .align(Alignment.Center)
-                .offset(y = (-90).dp)
+                .padding(top = 84.dp)
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
-                    imageVector = if (isPhoneUpright) Icons.Default.Check else Icons.Default.ScreenRotation,
+                    imageVector = if (isPhoneUpright) Icons.Default.CheckCircle else Icons.Default.ScreenRotation,
                     contentDescription = null,
                     tint = if (isPhoneUpright) Color(0xFF00E676) else Color(0xFFFFB300),
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(13.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = if (isPhoneUpright) "Posisi HP Tegak • Jarak Ideal 10–15 m" else "Posisikan HP Lebih Tegak Lurus",
+                    text = if (isPhoneUpright) "HP Tegak • Jarak 10–15 m" else "Tegakkan HP (65°–115°)",
                     color = Color.White,
-                    fontSize = 12.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
