@@ -142,24 +142,25 @@ object RnimsApiClient {
                 for (endpoint in loginEndpoints) {
                     try {
                         val url = URL(endpoint)
-                        val connection = (url.openConnection() as HttpURLConnection).apply {
-                            connectTimeout = 4000
-                            readTimeout = 4000
-                            requestMethod = "POST"
-                            setRequestProperty("Content-Type", "application/json")
-                            setRequestProperty("Accept", "application/json")
-                            doOutput = true
-                        }
-
                         val payload = mapOf(
                             "username" to usernameOrEmail,
                             "password" to password
                         )
-                        val jsonPayload = gson.toJson(payload)
+                        val jsonBytes = gson.toJson(payload).toByteArray(Charsets.UTF_8)
 
-                        OutputStreamWriter(connection.outputStream).use { writer ->
-                            writer.write(jsonPayload)
-                            writer.flush()
+                        val connection = (url.openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 4000
+                            readTimeout = 4000
+                            requestMethod = "POST"
+                            setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                            setRequestProperty("Accept", "application/json")
+                            setFixedLengthStreamingMode(jsonBytes.size)
+                            doOutput = true
+                        }
+
+                        connection.outputStream.use { os ->
+                            os.write(jsonBytes)
+                            os.flush()
                         }
 
                         val responseCode = connection.responseCode
