@@ -198,6 +198,30 @@ data class PoleEntity(
     }
 }
 
+fun PoleEntity.calculateStatus(): TagStatus {
+    return when {
+        isSafetyDeferred -> TagStatus.CONFLICT
+        condition == PoleCondition.CRITICAL || condition == PoleCondition.DAMAGED -> TagStatus.CONFLICT
+        syncStatus == "SYNCED" || isExistingPole -> TagStatus.COMPLETED
+        latitude != 0.0 && !photoPath.isNullOrEmpty() -> TagStatus.COMPLETED
+        else -> status
+    }
+}
+
+fun PoleEntity.withCalculatedStatus(): PoleEntity {
+    val computedStatus = calculateStatus()
+    val updatedPhotoPaths = if (!photoPath.isNullOrEmpty()) {
+        if (photoPaths.isEmpty() || !photoPaths.contains(photoPath)) listOf(photoPath) else photoPaths
+    } else {
+        photoPaths
+    }
+    return if (computedStatus != status || updatedPhotoPaths != photoPaths) {
+        copy(status = computedStatus, photoPaths = updatedPhotoPaths)
+    } else {
+        this
+    }
+}
+
 typealias Pole = PoleEntity
 
 data class Project(

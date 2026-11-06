@@ -73,7 +73,15 @@ class InventoryRepository(private val context: Context) {
         // Observasi seluruh tiang dari SQLite Room
         scope.launch {
             dao.getAllPolesFlow().collect { poleList ->
-                _poles.value = poleList.associateBy { it.id }
+                val healedPoles = poleList.map { it.withCalculatedStatus() }
+                // Self-healing: jika tiang sudah ada foto & koordinat tapi status belum COMPLETED, update SQLite
+                healedPoles.forEach { healed ->
+                    val original = poleList.find { it.id == healed.id }
+                    if (original != null && original.status != healed.status) {
+                        scope.launch { dao.insertPole(healed) }
+                    }
+                }
+                _poles.value = healedPoles.associateBy { it.id }
                 recalculateProjectStats()
             }
         }
@@ -272,9 +280,21 @@ class InventoryRepository(private val context: Context) {
 
     fun selectSegment(segmentId: String) {
         _selectedSegmentId.value = segmentId
-        val poleInSeg = _poles.value.values.firstOrNull { it.segmentId == segmentId }
-        if (poleInSeg != null) {
-            _targetPoleId.value = poleInSeg.id
+        val cleanId = segmentId.removePrefix("SEG-")
+        val seg = _project.value.segments.find { it.id == segmentId || it.id.removePrefix("SEG-") == cleanId || it.name == segmentId }
+        val segName = seg?.name ?: ""
+
+        val matchingPoles = _poles.value.values.filter { 
+            it.segmentId == segmentId || 
+            it.segmentId == segName || 
+            it.segmentId.removePrefix("SEG-") == cleanId
+        }.map { it.withCalculatedStatus() }.sortedBy { it.sequence }
+
+        val target = matchingPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED } 
+            ?: matchingPoles.firstOrNull()
+
+        if (target != null) {
+            _targetPoleId.value = target.id
         } else {
             _targetPoleId.value = ""
         }
@@ -309,12 +329,18 @@ class InventoryRepository(private val context: Context) {
         currentLng: Double,
         assetClass: String = "pole_9"
     ): PoleEntity {
-        val segment = _project.value.segments.find { it.id == segmentId }
-        val (autoCity, autoLoc) = deriveCodesFromSegmentName(segment?.name ?: "")
+        val cleanId = segmentId.removePrefix("SEG-")
+        val segment = _project.value.segments.find { it.id == segmentId || it.id.removePrefix("SEG-") == cleanId || it.name == segmentId }
+        val segName = segment?.name ?: ""
+        val (autoCity, autoLoc) = deriveCodesFromSegmentName(segName)
         val cityCode = segment?.cityCode?.takeIf { it.isNotBlank() } ?: autoCity
         val locationCode = segment?.locationCode?.takeIf { it.isNotBlank() } ?: autoLoc
 
-        val polesInSeg = _poles.value.values.filter { it.segmentId == segmentId }
+        val polesInSeg = _poles.value.values.filter { 
+            it.segmentId == segmentId || 
+            it.segmentId == segName || 
+            it.segmentId.removePrefix("SEG-") == cleanId 
+        }
         val nextSeq = if (polesInSeg.isEmpty()) {
             if ((segment?.currentSequence ?: 0) > 0) segment!!.currentSequence else 1
         } else {
@@ -631,12 +657,25 @@ class InventoryRepository(private val context: Context) {
             SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
         } else draft.capturedTimestamp
 
+        val calculatedStatus = when {
+            draft.isSafetyDeferred -> TagStatus.CONFLICT
+            draft.condition == PoleCondition.CRITICAL || draft.condition == PoleCondition.DAMAGED -> TagStatus.CONFLICT
+            draft.isExistingPole || draft.syncStatus == "SYNCED" -> TagStatus.COMPLETED
+            draft.latitude != 0.0 && !draft.photoPath.isNullOrEmpty() -> TagStatus.COMPLETED
+            else -> TagStatus.NOT_TAGGED
+        }
+
         val savedPole = draft.copy(
             capturedTimestamp = now,
             timestamp = now,
-            syncStatus = "PENDING"
-        )
+            syncStatus = "PENDING",
+            photoPaths = if (!draft.photoPath.isNullOrEmpty()) listOf(draft.photoPath!!) else draft.photoPaths,
+            status = calculatedStatus
+        ).withCalculatedStatus()
 
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[savedPole.id] = savedPole
+        _poles.value = updatedMap
         _currentDraftPole.value = savedPole
 
         scope.launch {
@@ -670,6 +709,14 @@ class InventoryRepository(private val context: Context) {
         val draft = _currentDraftPole.value?.takeIf { it.id == poleId } ?: _poles.value[poleId] ?: return null
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
 
+        val calculatedStatus = when {
+            isSafetyDeferred -> TagStatus.CONFLICT
+            draft.condition == PoleCondition.CRITICAL || draft.condition == PoleCondition.DAMAGED -> TagStatus.CONFLICT
+            isExistingPole || draft.syncStatus == "SYNCED" -> TagStatus.COMPLETED
+            latitude != 0.0 && !photoPath.isNullOrEmpty() -> TagStatus.COMPLETED
+            else -> TagStatus.NOT_TAGGED
+        }
+
         val savedPole = draft.copy(
             latitude = latitude,
             longitude = longitude,
@@ -691,8 +738,10 @@ class InventoryRepository(private val context: Context) {
             safetyDeferralReason = safetyDeferralReason,
             matchStatus = matchStatus,
             notes = notes ?: draft.notes,
-            isLocationLocked = true
-        )
+            isLocationLocked = true,
+            photoPaths = if (!photoPath.isNullOrEmpty()) listOf(photoPath) else emptyList(),
+            status = calculatedStatus
+        ).withCalculatedStatus()
 
         val updatedMap = _poles.value.toMutableMap()
         updatedMap[savedPole.id] = savedPole
@@ -735,10 +784,15 @@ class InventoryRepository(private val context: Context) {
 
     private suspend fun recalculateProjectStats() {
         val allSegments = dao.getAllSegmentsSync()
-        val allPoles = dao.getAllPolesSync()
+        val allPoles = dao.getAllPolesSync().map { it.withCalculatedStatus() }
 
         val updatedSegments = allSegments.map { seg ->
-            val segPoles = allPoles.filter { it.segmentId == seg.id }
+            val cleanSegId = seg.id.removePrefix("SEG-")
+            val segPoles = allPoles.filter { 
+                it.segmentId == seg.id || 
+                it.segmentId == seg.name || 
+                it.segmentId.removePrefix("SEG-") == cleanSegId 
+            }
             val total = segPoles.size
             val completed = segPoles.count { it.status == TagStatus.COMPLETED }
             val conflict = segPoles.count { it.status == TagStatus.CONFLICT }
@@ -792,14 +846,23 @@ class InventoryRepository(private val context: Context) {
     }
 
     fun deletePole(poleId: String) {
+        if (_currentDraftPole.value?.id == poleId) {
+            _currentDraftPole.value = null
+        }
+        if (_targetPoleId.value == poleId) {
+            _targetPoleId.value = ""
+        }
+        val updated = _poles.value.toMutableMap()
+        updated.remove(poleId)
+        _poles.value = updated
+
         scope.launch {
             dao.deletePoleById(poleId)
-            val updated = _poles.value.toMutableMap()
-            updated.remove(poleId)
-            _poles.value = updated
             recalculateProjectStats()
         }
     }
+
+    fun deletePoleById(poleId: String) = deletePole(poleId)
 
     fun addExportFile(file: ExportFile) {
         scope.launch {

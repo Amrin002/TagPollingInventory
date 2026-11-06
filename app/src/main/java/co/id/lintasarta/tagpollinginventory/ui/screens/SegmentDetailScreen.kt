@@ -29,6 +29,7 @@ import co.id.lintasarta.tagpollinginventory.data.model.RouteCoordinate
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
 import co.id.lintasarta.tagpollinginventory.data.model.TagStatus
+import co.id.lintasarta.tagpollinginventory.data.model.withCalculatedStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.OsmSegmentDetailMapView
 import co.id.lintasarta.tagpollinginventory.ui.components.TagStatusBadge
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
@@ -121,7 +122,7 @@ fun SegmentDetailScreen(
             it.segmentId == activeSegment.id || 
             it.segmentId == activeSegment.name ||
             it.segmentId.removePrefix("SEG-") == activeSegment.id.removePrefix("SEG-")
-        }.sortedBy { it.sequence }
+        }.map { it.withCalculatedStatus() }.sortedBy { it.sequence }
     }
 
     val completedCount = segmentPoles.count { it.status == TagStatus.COMPLETED }
@@ -241,6 +242,7 @@ fun SegmentDetailScreen(
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     val targetPole = segmentPoles.find { it.id == targetPoleId }
+                        ?: segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -248,13 +250,29 @@ fun SegmentDetailScreen(
                     ) {
                         Column {
                             Text(
-                                text = if (targetPole != null) "Target: PL ${targetPole.sequence} (${targetPole.effectiveAssetUid})" else "Pilih Mode Survei untuk Segment Ini:",
+                                text = if (targetPole != null) {
+                                    if (targetPole.status == TagStatus.COMPLETED) {
+                                        "Target: PL ${targetPole.sequence} (${targetPole.effectiveAssetUid}) • Selesai"
+                                    } else {
+                                        "Target: PL ${targetPole.sequence} (${targetPole.effectiveAssetUid})"
+                                    }
+                                } else {
+                                    "Pilih Mode Survei untuk Segment Ini:"
+                                },
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = TelecomPrimary
+                                color = if (targetPole?.status == TagStatus.COMPLETED) Color(0xFF2E7D32) else TelecomPrimary
                             )
                             Text(
-                                text = if (targetPole != null) "Lanjutkan survei tiang target dengan salah satu mode di bawah:" else "Mulai pengambilan data tiang baru:",
+                                text = if (targetPole != null) {
+                                    if (targetPole.status == TagStatus.COMPLETED) {
+                                        "Tiang ini telah disurvei. Tap tombol di bawah untuk survei tiang berikutnya:"
+                                    } else {
+                                        "Lanjutkan survei tiang target dengan salah satu mode di bawah:"
+                                    }
+                                } else {
+                                    "Mulai pengambilan data tiang baru:"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color.Gray,
                                 fontSize = 11.sp
@@ -271,8 +289,13 @@ fun SegmentDetailScreen(
                         // Tombol 1: Quick Tagging (< 1 Menit)
                         Button(
                             onClick = {
-                                if (targetPoleId.isNotEmpty()) {
-                                    viewModel.startQuickTaggingForTargetPole(targetPoleId)
+                                val poleToTag = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) {
+                                    targetPole
+                                } else {
+                                    segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
+                                }
+                                if (poleToTag != null) {
+                                    viewModel.startQuickTaggingForTargetPole(poleToTag.id)
                                 } else {
                                     viewModel.startQuickTaggingForSegment(activeSegment.id)
                                 }
@@ -299,8 +322,13 @@ fun SegmentDetailScreen(
                         // Tombol 2: Tag Polling PM (Survei Lengkap)
                         Button(
                             onClick = {
-                                if (targetPoleId.isNotEmpty()) {
-                                    onStartTagging(targetPoleId)
+                                val poleToTag = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) {
+                                    targetPole
+                                } else {
+                                    segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
+                                }
+                                if (poleToTag != null) {
+                                    onStartTagging(poleToTag.id)
                                 } else {
                                     viewModel.startPmSurveyForSegment(activeSegment.id)
                                 }
@@ -312,7 +340,7 @@ fun SegmentDetailScreen(
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(
-                                imageVector = if (targetPoleId.isNotEmpty()) Icons.Default.PlayArrow else Icons.Default.Add,
+                                imageVector = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) Icons.Default.PlayArrow else Icons.Default.Add,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )

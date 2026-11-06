@@ -618,7 +618,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startPmSurveyForSegment(segmentId: String) {
         _isQuickTaggingMode.value = false
         selectSegment(segmentId, navigateToDetail = false)
-        val polesInSeg = poles.value.values.filter { it.segmentId == segmentId }
+        val cleanId = segmentId.removePrefix("SEG-")
+        val polesInSeg = poles.value.values.filter { 
+            it.segmentId == segmentId || 
+            it.segmentId.removePrefix("SEG-") == cleanId 
+        }.map { it.withCalculatedStatus() }.sortedBy { it.sequence }
         val targetPole = polesInSeg.firstOrNull { it.status == TagStatus.NOT_TAGGED }
         if (targetPole != null) {
             startTaggingPole(targetPole.id)
@@ -629,9 +633,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun prepareNewPoleForQuickTagging(segmentId: String? = null) {
         val segId = segmentId ?: selectedSegmentId.value
-        val loc = currentLocation.value
-        val newPole = repository.createNewPoleInSegment(segId, loc.latitude, loc.longitude)
-        repository.startDraftForPole(newPole.id)
+        val cleanId = segId.removePrefix("SEG-")
+        val polesInSeg = repository.poles.value.values.filter { 
+            it.segmentId == segId || 
+            it.segmentId.removePrefix("SEG-") == cleanId 
+        }.map { it.withCalculatedStatus() }.sortedBy { it.sequence }
+
+        val nextUntagged = polesInSeg.firstOrNull { it.status == TagStatus.NOT_TAGGED && it.photoPath.isNullOrEmpty() }
+        if (nextUntagged != null) {
+            repository.setTargetPole(nextUntagged.id)
+            repository.startDraftForPole(nextUntagged.id)
+        } else {
+            val loc = currentLocation.value
+            val newPole = repository.createNewPoleInSegment(segId, loc.latitude, loc.longitude)
+            repository.startDraftForPole(newPole.id)
+        }
     }
 
     fun submitQuickTagPole(
@@ -695,6 +711,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun exitQuickTagging() {
         _isQuickTaggingMode.value = false
         stopLocationUpdates()
+
+        // Bersihkan draft tiang kosong yang belum pernah disimpan
+        val draft = currentDraftPole.value
+        if (draft != null && draft.status == TagStatus.NOT_TAGGED && draft.photoPath.isNullOrEmpty() && !draft.isExistingPole) {
+            repository.deletePole(draft.id)
+        }
+
         if (screenStack.isNotEmpty()) {
             navigateBack()
         } else {
