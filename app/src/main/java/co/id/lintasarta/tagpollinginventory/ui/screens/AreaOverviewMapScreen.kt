@@ -168,13 +168,12 @@ fun AreaOverviewMapScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = TelecomPrimary,
-                shadowElevation = 4.dp
+                shadowElevation = 3.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -195,13 +194,28 @@ fun AreaOverviewMapScreen(
                             )
                         }
                         Text(
-                            text = "Area 18 MPO • ${filteredSegments.size} dari ${allSegments.size} Rute Segmen",
+                            text = "Area ${currentUser.areaId} ${currentUser.areaLabel.uppercase()} • ${filteredSegments.size} dari ${allSegments.size} Rute Segmen",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
                     }
 
-                    NetworkStatusDot(networkStatus = networkStatus, size = 11.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        NetworkStatusDot(networkStatus = networkStatus, size = 9.dp)
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (currentUser.isOfflineSession || !networkStatus.isOnline) "Offline" else "Online",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
         }
@@ -230,10 +244,10 @@ fun AreaOverviewMapScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
                 color = Color.White.copy(alpha = 0.94f),
                 shape = RoundedCornerShape(20.dp),
-                shadowElevation = 6.dp
+                shadowElevation = 4.dp
             ) {
                 Row(
                     modifier = Modifier
@@ -487,7 +501,7 @@ fun AreaOverviewMapScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("Wilayah", fontSize = 11.sp, color = Color.Gray)
                                     Text(
-                                        text = segment.cityFilterKey.ifEmpty { "Area 18" },
+                                        text = segment.cityFilterKey.ifEmpty { "Area ${currentUser.areaId}" },
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp
                                     )

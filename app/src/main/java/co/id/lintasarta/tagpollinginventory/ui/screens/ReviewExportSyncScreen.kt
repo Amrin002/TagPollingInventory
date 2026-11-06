@@ -134,67 +134,53 @@ fun ReviewExportSyncScreen(
         topBar = {
             Surface(
                 color = TelecomPrimary,
-                shadowElevation = 4.dp
+                shadowElevation = 3.dp
             ) {
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .statusBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column {
+                        Text(
+                            text = "Sync & Export",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "Area ${currentUser.areaId} ${currentUser.areaLabel.uppercase()} • Alpaca PRA Master & Sync",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                    }
+
+                    // Staging Mode Badge
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (networkStatus.isOnline) Color(0xFF1B5E20) else Color(0xFF455A64)
                     ) {
-                        Column {
-                            Text(
-                                text = "LAYAR 4: REVIEW & EXPORT",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White.copy(alpha = 0.8f),
-                                letterSpacing = 1.sp
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(if (networkStatus.isOnline) Color(0xFF00E676) else Color(0xFFFFB74D))
                             )
+                            Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "Alpaca PRA Master & Sync",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                text = if (rnimsBaseUrl.contains("127.0.0.1")) "USB (ADB)" else if (networkStatus.isOnline) "ONLINE" else "OFFLINE",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                         }
-
-                        // Staging Mode Badge
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (networkStatus.isOnline) Color(0xFF1B5E20) else Color(0xFF455A64)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(if (networkStatus.isOnline) Color(0xFF00E676) else Color(0xFFFFB74D))
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = if (rnimsBaseUrl.contains("127.0.0.1")) "USB (ADB)" else "WI-FI",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
-                            }
-                        }
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Area ${currentUser.areaId} (${currentUser.areaLabel}) • Alpaca Poles Rental Agreement",
-                        fontSize = 11.sp,
-                        color = Color.White.copy(alpha = 0.9f)
-                    )
                 }
             }
         }
@@ -204,7 +190,7 @@ fun ReviewExportSyncScreen(
                 .fillMaxSize()
                 .background(NeutralBackground)
                 .padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // =========================================================================
