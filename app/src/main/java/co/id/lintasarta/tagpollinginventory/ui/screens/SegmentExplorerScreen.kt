@@ -184,103 +184,71 @@ fun SegmentExplorerScreen(
             .fillMaxSize()
             .background(NeutralBackground)
     ) {
-        // --- TOP CONTEXT BAR: Area 18 MPO & Surveyor ---
+        // --- TOP CONTEXT BAR: Minimalist Segment Menu AppBar ---
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = TelecomPrimary,
-            shadowElevation = 4.dp
+            shadowElevation = 3.dp
         ) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // 1. Nama Menu
+                Text(
+                    text = "Segment",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White
+                )
+
+                // 2. Actions: Button Rute/PO & Indikator Online/Offline
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // Button Rute/PO
+                    FilledTonalButton(
+                        onClick = { showAddManualRouteDialog = true },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color(0xFF00E676),
+                            contentColor = Color(0xFF1B5E20)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Rute/PO",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+
+                    // Indikator Online / Offline
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 2.dp)
+                        modifier = Modifier
+                            .background(Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp))
+                            .padding(horizontal = 9.dp, vertical = 6.dp)
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFF00C853),
-                            modifier = Modifier.size(10.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "PROJECT ALPACA PRA • AREA ${currentUser.areaId} (${currentUser.areaLabel.uppercase()})",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White,
-                            letterSpacing = 1.sp
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        NetworkStatusDot(networkStatus = networkStatus, size = 10.dp)
+                        NetworkStatusDot(networkStatus = networkStatus, size = 9.dp)
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (currentUser.isOfflineSession) "100% Offline" else "Online Alpaca",
+                            text = if (currentUser.isOfflineSession || !networkStatus.isOnline) "Offline" else "Online",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontWeight = FontWeight.Medium
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 11.sp
                         )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "Hybrid Route Explorer",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
-                        )
-                        Text(
-                            text = "${project.segments.size} Segmen MPO • 100% Siap Survei Offline",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.85f)
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // Tombol Tambah Rute / PO Baru
-                        FilledTonalButton(
-                            onClick = { showAddManualRouteDialog = true },
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = Color(0xFF00E676),
-                                contentColor = Color(0xFF1B5E20)
-                            ),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("+ Rute/PO", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
-                        }
-
-                        // Tombol Sinkronisasi / Reload Master Segmen
-                        FilledTonalIconButton(
-                            onClick = { viewModel.syncMpoSegmentsFromServer() },
-                            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                                containerColor = Color.White.copy(alpha = 0.2f),
-                                contentColor = Color.White
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Muat Ulang Segmen",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
                 }
             }
