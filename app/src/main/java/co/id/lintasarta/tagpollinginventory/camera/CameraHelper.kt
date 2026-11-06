@@ -190,44 +190,27 @@ fun compressAndWatermarkPhoto(
         val finalBitmap = if (settings.isWatermarkActive) {
             val watermarked = processedBitmap.copy(Bitmap.Config.ARGB_8888, true)
             val canvas = Canvas(watermarked)
-            val w = watermarked.width
-            val h = watermarked.height
+            val w = watermarked.width.toFloat()
+            val h = watermarked.height.toFloat()
 
-            val bannerHeight = (h * 0.12f).coerceAtLeast(140f)
-            val bannerPaint = Paint().apply {
-                color = AndroidColor.argb(190, 0, 0, 0) // Semi-transparent black
-                style = Paint.Style.FILL
-            }
-            canvas.drawRect(0f, h - bannerHeight, w.toFloat(), h.toFloat(), bannerPaint)
-
-            val accentBarPaint = Paint().apply {
-                color = AndroidColor.parseColor("#1565C0") // Telecom Primary Blue
-                style = Paint.Style.FILL
-            }
-            canvas.drawRect(0f, h - bannerHeight, 16f, h.toFloat(), accentBarPaint)
-
-            val textSizeTitle = (bannerHeight * 0.28f).coerceIn(24f, 48f)
-            val textSizeBody = (bannerHeight * 0.20f).coerceIn(18f, 34f)
+            // Ukuran teks proporsional terhadap resolusi foto (terlihat jelas di resolusi sensor 12MP/4K maupun 1080p)
+            val textSizeTitle = (w * 0.034f).coerceAtLeast(32f)
+            val textSizeBody = (w * 0.023f).coerceAtLeast(22f)
 
             val titlePaint = Paint().apply {
                 color = AndroidColor.WHITE
                 textSize = textSizeTitle
                 isAntiAlias = true
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setShadowLayer(4f, 2f, 2f, AndroidColor.BLACK)
             }
 
             val bodyPaint = Paint().apply {
-                color = AndroidColor.parseColor("#E0E0E0")
+                color = AndroidColor.parseColor("#EEEEEE")
                 textSize = textSizeBody
                 isAntiAlias = true
-                typeface = Typeface.DEFAULT
-            }
-
-            val tagPaint = Paint().apply {
-                color = AndroidColor.parseColor("#64B5F6")
-                textSize = textSizeBody
-                isAntiAlias = true
-                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                setShadowLayer(3f, 1f, 1f, AndroidColor.BLACK)
             }
 
             // Timezone formatting
@@ -256,14 +239,47 @@ fun compressAndWatermarkPhoto(
                 "Koor: Menunggu GPS Lock"
             }
 
-            val startX = 36f
-            val line1Y = h - bannerHeight + (bannerHeight * 0.32f)
-            val line2Y = h - bannerHeight + (bannerHeight * 0.62f)
-            val line3Y = h - bannerHeight + (bannerHeight * 0.88f)
+            val titleText = "TIANG: $poleCode"
+            val bodyText = "$coordText  •  Waktu: $dateDisplay"
 
-            canvas.drawText("TIANG: $poleCode", startX, line1Y, titlePaint)
-            canvas.drawText("$coordText  •  Waktu: $dateDisplay", startX, line2Y, bodyPaint)
-            canvas.drawText("LINTASARTA RNIMS FIELD SURVEY (MPO AS-BUILT) • ISO-27001", startX, line3Y, tagPaint)
+            // Floating watermark card di DALAM rasio foto (dengan margin & padding proporsional)
+            val marginH = w * 0.035f
+            val marginB = h * 0.035f
+            val paddingH = w * 0.035f
+            val paddingV = h * 0.016f
+            val lineSpacing = textSizeBody * 0.45f
+
+            val cardHeight = (paddingV * 2) + textSizeTitle + lineSpacing + textSizeBody
+            val cardLeft = marginH
+            val cardRight = w - marginH
+            val cardBottom = h - marginB
+            val cardTop = cardBottom - cardHeight
+            val cornerRadius = (w * 0.015f).coerceAtLeast(16f)
+
+            // Background card semi-transparan
+            val cardPaint = Paint().apply {
+                color = AndroidColor.argb(205, 18, 20, 24)
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+            canvas.drawRoundRect(cardLeft, cardTop, cardRight, cardBottom, cornerRadius, cornerRadius, cardPaint)
+
+            // Accent bar vertikal Telecom Blue di sisi kiri card
+            val accentWidth = (w * 0.012f).coerceAtLeast(10f)
+            val accentPaint = Paint().apply {
+                color = AndroidColor.parseColor("#1565C0")
+                style = Paint.Style.FILL
+                isAntiAlias = true
+            }
+            canvas.drawRoundRect(cardLeft, cardTop, cardLeft + accentWidth, cardBottom, cornerRadius, cornerRadius, accentPaint)
+
+            // Posisi teks
+            val textStartX = cardLeft + accentWidth + paddingH
+            val line1Y = cardTop + paddingV + textSizeTitle
+            val line2Y = line1Y + lineSpacing + textSizeBody
+
+            canvas.drawText(titleText, textStartX, line1Y, titlePaint)
+            canvas.drawText(bodyText, textStartX, line2Y, bodyPaint)
 
             watermarked
         } else {

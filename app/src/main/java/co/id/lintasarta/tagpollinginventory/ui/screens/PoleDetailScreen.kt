@@ -402,16 +402,17 @@ fun PoleDetailScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(220.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .border(1.dp, Color(0xFFCFD8DC), RoundedCornerShape(10.dp))
+                                .heightIn(min = 240.dp, max = 340.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1E2124))
+                                .border(1.dp, Color(0xFFCFD8DC), RoundedCornerShape(12.dp))
                                 .clickable { showFullPhotoDialog = true }
                         ) {
                             AsyncImage(
                                 model = File(currentPole.photoPath!!),
                                 contentDescription = "Foto Tiang ${currentPole.effectiveAssetUid}",
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Fit
                             )
 
                             // Watermark badge overlay on thumbnail

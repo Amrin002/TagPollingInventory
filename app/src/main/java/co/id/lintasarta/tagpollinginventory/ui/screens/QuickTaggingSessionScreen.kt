@@ -856,20 +856,21 @@ fun QuickTaggingSessionScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Pratinjau Foto jika sudah diambil
+                    // Pratinjau Foto jika sudah diambil (Rasio Utuh Fit agar Geotag Selalu Tampak)
                     if (capturedPhotoPath != null) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .border(1.dp, Color(0xFFCFD8DC), RoundedCornerShape(10.dp))
+                                .heightIn(min = 240.dp, max = 340.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFF1E2124))
+                                .border(1.dp, Color(0xFFCFD8DC), RoundedCornerShape(12.dp))
                         ) {
                             AsyncImage(
                                 model = File(capturedPhotoPath!!),
                                 contentDescription = "Foto Tiang Ber-watermark",
                                 modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
+                                contentScale = ContentScale.Fit
                             )
                             Surface(
                                 shape = RoundedCornerShape(bottomStart = 8.dp),
@@ -877,7 +878,7 @@ fun QuickTaggingSessionScreen(
                                 modifier = Modifier.align(Alignment.TopEnd)
                             ) {
                                 Text(
-                                    text = if (cameraSettings.isWatermarkActive) "Watermark GPS & SHA-256 Tersemat" else "Foto Polos (EXIF Tersimpan)",
+                                    text = if (cameraSettings.isWatermarkActive) "Watermark GPS Tersemat" else "Foto Polos (EXIF Tersimpan)",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,

@@ -329,11 +329,10 @@ fun GeotagCameraSettingsCard(viewModel: MainViewModel) {
                         contentAlignment = Alignment.BottomStart
                     ) {
                         if (cameraSettings.isWatermarkActive) {
-                            Column {
-                                Text("TIANG: TNG-001/MPO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                Text("$previewCoord", color = Color(0xFFE0E0E0), fontSize = 9.sp)
-                                Text("Waktu: $previewTime", color = Color(0xFFE0E0E0), fontSize = 9.sp)
-                                Text("LINTASARTA RNIMS FIELD SURVEY • ISO-27001", color = Color(0xFF64B5F6), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("TIANG: TNG-001/MPO", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("$previewCoord", color = Color(0xFFEEEEEE), fontSize = 10.sp)
+                                Text("Waktu: $previewTime", color = Color(0xFFEEEEEE), fontSize = 10.sp)
                             }
                         } else {
                             Column(
