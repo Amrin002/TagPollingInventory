@@ -1,8 +1,10 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -16,11 +18,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.id.lintasarta.tagpollinginventory.data.model.CameraSettings
+import co.id.lintasarta.tagpollinginventory.data.model.TimezoneOption
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
 @Composable
 fun GeotagCameraSettingsScreen(
@@ -48,18 +54,81 @@ fun GeotagCameraSettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            GeotagCameraSettingsCard()
+            GeotagCameraSettingsCard(viewModel)
         }
     }
 }
 
 @Composable
-fun GeotagCameraSettingsCard() {
-    var isGpsActive by remember { mutableStateOf(true) }
-    var isHighAccuracy by remember { mutableStateOf(true) }
-    var isWatermarkActive by remember { mutableStateOf(true) }
-    var isTimezoneSync by remember { mutableStateOf(true) }
-    var isExifSaveActive by remember { mutableStateOf(true) }
+fun GeotagCameraSettingsCard(viewModel: MainViewModel) {
+    val cameraSettings by viewModel.cameraSettings.collectAsState()
+    var showTimezoneDialog by remember { mutableStateOf(false) }
+
+    if (showTimezoneDialog) {
+        AlertDialog(
+            onDismissRequest = { showTimezoneDialog = false },
+            title = {
+                Text(
+                    text = "Pilih Zona Waktu Watermark",
+                    fontWeight = FontWeight.Bold,
+                    color = TelecomPrimary,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TimezoneOption.values().forEach { option ->
+                        val isSelected = option == cameraSettings.timezoneOption
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .selectable(
+                                    selected = isSelected,
+                                    onClick = {
+                                        viewModel.updateCameraSettings(cameraSettings.copy(timezoneOption = option))
+                                        showTimezoneDialog = false
+                                    }
+                                )
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    viewModel.updateCameraSettings(cameraSettings.copy(timezoneOption = option))
+                                    showTimezoneDialog = false
+                                },
+                                colors = RadioButtonDefaults.colors(selectedColor = TelecomPrimary)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = option.displayName,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 14.sp,
+                                    color = if (isSelected) TelecomPrimary else Color.Black
+                                )
+                                Text(
+                                    text = if (option == TimezoneOption.AUTO) {
+                                        "Mengikuti jam di HP saat pengambilan foto"
+                                    } else {
+                                        "Zona waktu resmi: ${option.code} (${option.zoneId})"
+                                    },
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showTimezoneDialog = false }) {
+                    Text("Tutup", color = TelecomPrimary)
+                }
+            }
+        )
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -97,7 +166,7 @@ fun GeotagCameraSettingsCard() {
                         color = TelecomPrimary
                     )
                     Text(
-                        text = "Pastikan pengaturan berikut aktif agar foto memiliki lokasi & waktu akurat.",
+                        text = "Konfigurasi geotagging, watermark, dan kualitas resolusi foto kamera.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color.Gray
                     )
@@ -110,61 +179,138 @@ fun GeotagCameraSettingsCard() {
             GeotagSettingRow(
                 icon = Icons.Default.LocationOn,
                 title = "Lokasi / GPS",
-                subtitle = "Aktifkan akses lokasi untuk kamera",
-                isChecked = isGpsActive,
-                onCheckedChange = { isGpsActive = it },
-                statusBadgeText = if (isGpsActive) "✓ GPS Aktif / High Accuracy" else "GPS Non-Aktif"
+                subtitle = "Aktifkan pencatatan koordinat GPS pada foto",
+                isChecked = cameraSettings.isGpsActive,
+                onCheckedChange = { viewModel.updateCameraSettings(cameraSettings.copy(isGpsActive = it)) },
+                statusBadgeText = if (cameraSettings.isGpsActive) "✓ GPS Aktif" else "GPS Non-Aktif"
             )
 
             // 2. Akurasi Lokasi
             GeotagSettingRow(
                 icon = Icons.Default.GpsFixed,
-                title = "Akurasi Lokasi",
-                subtitle = "Gunakan mode akurasi tertinggi (High Accuracy)",
-                isChecked = isHighAccuracy,
-                onCheckedChange = { isHighAccuracy = it },
-                statusBadgeText = if (isHighAccuracy) "✓ Koordinat: DD.dddddd°" else "Mode Hemat Baterai"
+                title = "Akurasi Lokasi Tinggi",
+                subtitle = "Format koordinat presisi tinggi (6 desimal: DD.dddddd°)",
+                isChecked = cameraSettings.isHighAccuracy,
+                onCheckedChange = { viewModel.updateCameraSettings(cameraSettings.copy(isHighAccuracy = it)) },
+                statusBadgeText = if (cameraSettings.isHighAccuracy) "✓ Presisi 6 Desimal (±10cm)" else "Presisi Standar (4 Desimal)"
             )
 
             // 3. Watermark / Timestamp
             GeotagSettingRow(
                 icon = Icons.Default.AccessTime,
-                title = "Watermark / Timestamp",
-                subtitle = "Tampilkan tanggal & waktu pada foto (Next Update)",
-                isChecked = isWatermarkActive,
-                onCheckedChange = { isWatermarkActive = it },
-                statusBadgeText = if (isWatermarkActive) "✓ Timestamp Lokal Aktif" else "Watermark Non-Aktif"
+                title = "Watermark Teks Visual",
+                subtitle = "Cetak banner tiang, koordinat & waktu langsung pada foto",
+                isChecked = cameraSettings.isWatermarkActive,
+                onCheckedChange = { viewModel.updateCameraSettings(cameraSettings.copy(isWatermarkActive = it)) },
+                statusBadgeText = if (cameraSettings.isWatermarkActive) "✓ Watermark Banner Aktif" else "Watermark Non-Aktif (Foto Polos)"
             )
 
             // 4. Zona Waktu
-            GeotagSettingRow(
-                icon = Icons.Default.Language,
-                title = "Zona Waktu",
-                subtitle = "Pilih WIB / GMT+7 (Asia/Jakarta)",
-                isChecked = isTimezoneSync,
-                onCheckedChange = { isTimezoneSync = it },
-                statusBadgeText = if (isTimezoneSync) "✓ Waktu Sinkron: WIB / GMT+7" else "Waktu Lokal Perangkat"
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showTimezoneDialog = true }
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Language,
+                        contentDescription = null,
+                        tint = TelecomPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text("Zona Waktu Watermark", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = cameraSettings.timezoneOption.displayName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFE3F2FD),
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            Text(
+                                text = "Zona Terpilih: ${cameraSettings.timezoneOption.code}",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TelecomPrimary
+                            )
+                        }
+                    }
+                }
 
-            // 5. Simpan Metadata
+                IconButton(onClick = { showTimezoneDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowDropDown,
+                        contentDescription = "Pilih Zona Waktu",
+                        tint = TelecomPrimary
+                    )
+                }
+            }
+
+            // 5. Simpan Metadata EXIF
             GeotagSettingRow(
                 icon = Icons.Default.PhotoCamera,
-                title = "Simpan Metadata",
-                subtitle = "Simpan informasi lokasi (EXIF GPS) pada setiap foto",
-                isChecked = isExifSaveActive,
-                onCheckedChange = { isExifSaveActive = it },
-                statusBadgeText = if (isExifSaveActive) "✓ Metadata EXIF GPS Tersimpan" else "EXIF Non-Aktif"
+                title = "Simpan Metadata EXIF",
+                subtitle = "Tanam koordinat GPS dan SHA-256 hash ke metadata JPEG",
+                isChecked = cameraSettings.isExifSaveActive,
+                onCheckedChange = { viewModel.updateCameraSettings(cameraSettings.copy(isExifSaveActive = it)) },
+                statusBadgeText = if (cameraSettings.isExifSaveActive) "✓ EXIF GPS & Hash SHA-256 Tersimpan" else "EXIF Non-Aktif"
+            )
+
+            // 6. Kompresi Foto (Default: OFF / Kualitas Penuh 100%)
+            GeotagSettingRow(
+                icon = Icons.Default.HighQuality,
+                title = "Kompresi Foto",
+                subtitle = "Kompres resolusi maks 1920px & JPEG 80% (Hemat memori)",
+                isChecked = cameraSettings.isCompressionEnabled,
+                onCheckedChange = { viewModel.updateCameraSettings(cameraSettings.copy(isCompressionEnabled = it)) },
+                statusBadgeText = if (cameraSettings.isCompressionEnabled) "Mode Kompresi Aktif (Maks 1920px, ~500 KB)" else "✓ Kualitas Penuh 100% (Resolusi Asli Kamera)"
             )
 
             HorizontalDivider()
 
             // CONTOH WATERMARK PADA FOTO PREVIEW BOX
             Text(
-                text = "CONTOH PRATINJAU WATERMARK FOTO",
+                text = "PRATINJAU HASIL FOTO & WATERMARK",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
                 color = TelecomPrimary
             )
+
+            val previewCoord = if (!cameraSettings.isGpsActive) {
+                "Koor: GPS Nonaktif"
+            } else if (cameraSettings.isHighAccuracy) {
+                "Koor: -6.200123, 106.816456"
+            } else {
+                "Koor: -6.2001, 106.8164"
+            }
+
+            val previewTime = remember(cameraSettings.timezoneOption) {
+                val tz = if (cameraSettings.timezoneOption == TimezoneOption.AUTO) {
+                    TimeZone.getDefault()
+                } else {
+                    TimeZone.getTimeZone(cameraSettings.timezoneOption.zoneId)
+                }
+                val sdf = SimpleDateFormat("dd MMM yyyy — HH:mm:ss", Locale.US).apply {
+                    timeZone = tz
+                }
+                val tzCode = if (cameraSettings.timezoneOption == TimezoneOption.AUTO) {
+                    tz.getDisplayName(tz.inDaylightTime(Date()), TimeZone.SHORT, Locale.US)
+                } else {
+                    cameraSettings.timezoneOption.code
+                }
+                "${sdf.format(Date())} $tzCode"
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -174,19 +320,32 @@ fun GeotagCameraSettingsCard() {
                 Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .height(110.dp),
+                        .height(120.dp),
                     color = Color(0xFF212121),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Box(
-                        modifier = Modifier.padding(10.dp),
+                        modifier = Modifier.padding(8.dp),
                         contentAlignment = Alignment.BottomStart
                     ) {
-                        Column {
-                            Text("Lat -6.200123°", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text("Lon 106.816456°", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            Text("2026-07-08 09:15", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-                            Text("WIB (GMT+7)", color = Color(0xFF81C784), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        if (cameraSettings.isWatermarkActive) {
+                            Column {
+                                Text("TIANG: TNG-001/MPO", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("$previewCoord", color = Color(0xFFE0E0E0), fontSize = 9.sp)
+                                Text("Waktu: $previewTime", color = Color(0xFFE0E0E0), fontSize = 9.sp)
+                                Text("LINTASARTA RNIMS FIELD SURVEY • ISO-27001", color = Color(0xFF64B5F6), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.Default.Image, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Foto Polos / Bersih", color = Color.LightGray, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Watermark visual dinonaktifkan", color = Color.Gray, fontSize = 9.sp)
+                            }
                         }
                     }
                 }
@@ -195,22 +354,39 @@ fun GeotagCameraSettingsCard() {
                 Surface(
                     modifier = Modifier
                         .weight(1f)
-                        .height(110.dp),
+                        .height(120.dp),
                     color = Color(0xFFE3F2FD),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.Info, contentDescription = null, tint = TelecomPrimary, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Decimal Degrees (DD.dddddd°)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = TelecomPrimary)
+                            Text(
+                                if (cameraSettings.isCompressionEnabled) "Kualitas Kompresi" else "Kualitas Penuh (100%)",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TelecomPrimary
+                            )
                         }
-                        Text("• Lat: Lintang (- South, + North)", fontSize = 10.sp, color = Color.DarkGray)
-                        Text("• Lon: Bujur (- West, + East)", fontSize = 10.sp, color = Color.DarkGray)
-                        Text("• Format Waktu: 24 Jam (WIB)", fontSize = 10.sp, color = Color.DarkGray)
+                        Text(
+                            text = if (cameraSettings.isCompressionEnabled) {
+                                "• Resolusi: Maks 1920x1080 px\n• Kualitas: 80% JPEG (~400KB)"
+                            } else {
+                                "• Resolusi: Asli Sensor Kamera\n• Kualitas: 100% JPEG Maksimal"
+                            },
+                            fontSize = 9.sp,
+                            color = Color.DarkGray
+                        )
+                        Text(
+                            text = if (cameraSettings.isExifSaveActive) "• Metadata: GPS & SHA-256 Aktif" else "• Metadata: Nonaktif",
+                            fontSize = 9.sp,
+                            color = if (cameraSettings.isExifSaveActive) Color(0xFF2E7D32) else Color(0xFFC62828),
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
@@ -230,8 +406,8 @@ fun GeotagCameraSettingsCard() {
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("TIPS PENTING SOP LAPANGAN:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color(0xFFEF6C00))
                     }
-                    Text("1. Pastikan berada di area terbuka untuk sinyal GPS yang optimal.", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE65100))
-                    Text("2. Periksa hasil foto untuk memastikan watermark & EXIF lokasi tersimpan.", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE65100))
+                    Text("1. Kualitas Penuh 100% menghasilkan foto resolusi tinggi sangat tajam untuk audit kabel & tiang.", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE65100))
+                    Text("2. Gunakan Watermark & EXIF aktif untuk bukti otentik survei MPO as-built berstandar ISO-27001.", style = MaterialTheme.typography.bodySmall, color = Color(0xFFE65100))
                 }
             }
         }

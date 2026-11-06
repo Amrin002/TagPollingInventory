@@ -46,6 +46,7 @@ import coil.compose.AsyncImage
 import co.id.lintasarta.tagpollinginventory.camera.CameraPreview
 import co.id.lintasarta.tagpollinginventory.camera.calculateFileSha256
 import co.id.lintasarta.tagpollinginventory.camera.takePhoto
+import co.id.lintasarta.tagpollinginventory.data.model.CameraSettings
 import co.id.lintasarta.tagpollinginventory.data.model.PoleEntity
 import co.id.lintasarta.tagpollinginventory.data.model.RouteCoordinate
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
@@ -115,6 +116,7 @@ fun QuickTaggingSessionScreen(
     val allPoles by viewModel.poles.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
+    val cameraSettings by viewModel.cameraSettings.collectAsState()
 
     // Screen State for the current pole
     var selectedAssetClass by remember { mutableStateOf(draftPole?.assetClass ?: "pole_9") }
@@ -841,7 +843,9 @@ fun QuickTaggingSessionScreen(
                             color = if (capturedPhotoPath != null) Color(0xFFE8F5E9) else Color(0xFFF5F5F5)
                         ) {
                             Text(
-                                text = if (capturedPhotoPath != null) "Foto Terkompresi < 400KB" else "Belum Diambil",
+                                text = if (capturedPhotoPath != null) {
+                                    if (cameraSettings.isCompressionEnabled) "Foto Terkompresi (~400KB)" else "Foto Kualitas Penuh 100%"
+                                } else "Belum Diambil",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (capturedPhotoPath != null) Color(0xFF2E7D32) else Color.Gray,
@@ -873,7 +877,7 @@ fun QuickTaggingSessionScreen(
                                 modifier = Modifier.align(Alignment.TopEnd)
                             ) {
                                 Text(
-                                    text = "Watermark GPS & SHA-256 Tersemat",
+                                    text = if (cameraSettings.isWatermarkActive) "Watermark GPS & SHA-256 Tersemat" else "Foto Polos (EXIF Tersimpan)",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -1124,6 +1128,7 @@ fun QuickTaggingSessionScreen(
                 poleId = displayAssetUid,
                 lat = correctedLat ?: 0.0,
                 lng = correctedLng ?: 0.0,
+                cameraSettings = cameraSettings,
                 onPhotoCaptured = { photoFile, sha256 ->
                     capturedPhotoPath = photoFile.absolutePath
                     capturedPhotoSha256 = sha256
@@ -1362,6 +1367,7 @@ fun QuickCameraOverlay(
     poleId: String,
     lat: Double,
     lng: Double,
+    cameraSettings: CameraSettings = CameraSettings(),
     onPhotoCaptured: (File, String) -> Unit,
     onClose: () -> Unit
 ) {
@@ -1506,6 +1512,7 @@ fun QuickCameraOverlay(
                                 poleId = poleId,
                                 lat = lat,
                                 lng = lng,
+                                settings = cameraSettings,
                                 onPhotoSaved = { file ->
                                     isCapturing = false
                                     val sha256 = calculateFileSha256(file)

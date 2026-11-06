@@ -50,6 +50,7 @@ import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.ui.components.TopBar
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
 import androidx.compose.ui.tooling.preview.Preview
+import co.id.lintasarta.tagpollinginventory.data.model.CameraSettings
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TagPollingInventoryTheme
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
@@ -67,11 +68,13 @@ fun PhotoCaptureScreen(
     val draftPole by viewModel.currentDraftPole.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
+    val cameraSettings by viewModel.cameraSettings.collectAsState()
 
     PhotoCaptureScreenContent(
         draftPole = draftPole,
         networkStatus = networkStatus,
         currentLocation = currentLocation,
+        cameraSettings = cameraSettings,
         onBackClick = onBackClick,
         onSaveAndReview = onSaveAndReview,
         onSetDraftPhotoForSlot = { slotIndex, path ->
@@ -182,6 +185,7 @@ fun PhotoCaptureScreenContent(
     draftPole: Pole?,
     networkStatus: NetworkStatus,
     currentLocation: LocationData,
+    cameraSettings: CameraSettings = CameraSettings(),
     onBackClick: () -> Unit,
     onSaveAndReview: () -> Unit,
     onSetDraftPhotoForSlot: (Int, String) -> Unit = { _, _ -> },
@@ -506,6 +510,7 @@ fun PhotoCaptureScreenContent(
                                             poleId = poleId,
                                             lat = draftPole?.latitude ?: 0.0,
                                             lng = draftPole?.longitude ?: 0.0,
+                                            settings = cameraSettings,
                                             onPhotoSaved = { file ->
                                                 onSetDraftPhotoForSlot(slotIndex, file.absolutePath)
                                                 isCapturing = false

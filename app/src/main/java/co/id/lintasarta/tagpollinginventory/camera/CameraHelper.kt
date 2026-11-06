@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.exifinterface.media.ExifInterface
+import co.id.lintasarta.tagpollinginventory.data.model.CameraSettings
+import co.id.lintasarta.tagpollinginventory.data.model.TimezoneOption
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -86,6 +88,7 @@ fun takePhoto(
     poleId: String,
     lat: Double = 0.0,
     lng: Double = 0.0,
+    settings: CameraSettings = CameraSettings(),
     onPhotoSaved: (File) -> Unit,
     onError: (Exception) -> Unit
 ) {
@@ -110,8 +113,8 @@ fun takePhoto(
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     Log.d("CameraHelper", "Photo capture succeeded: ${photoFile.absolutePath}")
                     
-                    // Compress to max 1920x1080, apply visual watermark, compress JPEG 80%, write EXIF GPS & SHA-256
-                    compressAndWatermarkPhoto(photoFile, poleId, lat, lng)
+                    // Process photo based on user camera settings
+                    compressAndWatermarkPhoto(photoFile, poleId, lat, lng, settings)
 
                     onPhotoSaved(photoFile)
                 }
@@ -129,13 +132,15 @@ fun takePhoto(
 }
 
 /**
- * Kompresi resolusi maks 1920x1080, JPEG 80% (< 500 KB), dan Watermark Geotag otomatis
+ * Pemrosesan foto: Full native resolution / resolusi penuh tanpa kompresi secara default,
+ * Watermark geotag dinamis (timezone & koordinat), dan EXIF SHA-256 / GPS.
  */
 fun compressAndWatermarkPhoto(
     photoFile: File,
     poleCode: String,
     lat: Double,
-    lng: Double
+    lng: Double,
+    settings: CameraSettings = CameraSettings()
 ) {
     try {
         if (!photoFile.exists()) return
@@ -163,99 +168,137 @@ fun compressAndWatermarkPhoto(
             rawBitmap
         }
 
-        // 4. Scale down to max 1920x1080 (preserving aspect ratio)
-        val maxDimension = 1920
-        val width = rotatedBitmap.width
-        val height = rotatedBitmap.height
-        val scaledBitmap = if (width > maxDimension || height > maxDimension) {
-            val ratio = minOf(maxDimension.toFloat() / width, maxDimension.toFloat() / height)
-            val targetW = (width * ratio).toInt()
-            val targetH = (height * ratio).toInt()
-            Bitmap.createScaledBitmap(rotatedBitmap, targetW, targetH, true)
+        // 4. Resolution handling: Compress/downscale only if isCompressionEnabled is true
+        val processedBitmap = if (settings.isCompressionEnabled) {
+            val maxDimension = 1920
+            val width = rotatedBitmap.width
+            val height = rotatedBitmap.height
+            if (width > maxDimension || height > maxDimension) {
+                val ratio = minOf(maxDimension.toFloat() / width, maxDimension.toFloat() / height)
+                val targetW = (width * ratio).toInt()
+                val targetH = (height * ratio).toInt()
+                Bitmap.createScaledBitmap(rotatedBitmap, targetW, targetH, true)
+            } else {
+                rotatedBitmap
+            }
         } else {
+            // Uncompressed: Maintain 100% native resolution
             rotatedBitmap
         }
 
-        // 5. Draw Watermark onto Bitmap
-        val watermarkedBitmap = scaledBitmap.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(watermarkedBitmap)
-        val w = watermarkedBitmap.width
-        val h = watermarkedBitmap.height
+        // 5. Watermark: Draw if isWatermarkActive is true
+        val finalBitmap = if (settings.isWatermarkActive) {
+            val watermarked = processedBitmap.copy(Bitmap.Config.ARGB_8888, true)
+            val canvas = Canvas(watermarked)
+            val w = watermarked.width
+            val h = watermarked.height
 
-        val bannerHeight = (h * 0.12f).coerceAtLeast(140f)
-        val bannerPaint = Paint().apply {
-            color = AndroidColor.argb(190, 0, 0, 0) // Semi-transparent black
-            style = Paint.Style.FILL
-        }
-        canvas.drawRect(0f, h - bannerHeight, w.toFloat(), h.toFloat(), bannerPaint)
+            val bannerHeight = (h * 0.12f).coerceAtLeast(140f)
+            val bannerPaint = Paint().apply {
+                color = AndroidColor.argb(190, 0, 0, 0) // Semi-transparent black
+                style = Paint.Style.FILL
+            }
+            canvas.drawRect(0f, h - bannerHeight, w.toFloat(), h.toFloat(), bannerPaint)
 
-        val accentBarPaint = Paint().apply {
-            color = AndroidColor.parseColor("#1565C0") // Telecom Primary Blue
-            style = Paint.Style.FILL
-        }
-        canvas.drawRect(0f, h - bannerHeight, 16f, h.toFloat(), accentBarPaint)
+            val accentBarPaint = Paint().apply {
+                color = AndroidColor.parseColor("#1565C0") // Telecom Primary Blue
+                style = Paint.Style.FILL
+            }
+            canvas.drawRect(0f, h - bannerHeight, 16f, h.toFloat(), accentBarPaint)
 
-        val textSizeTitle = (bannerHeight * 0.28f).coerceIn(24f, 48f)
-        val textSizeBody = (bannerHeight * 0.20f).coerceIn(18f, 34f)
+            val textSizeTitle = (bannerHeight * 0.28f).coerceIn(24f, 48f)
+            val textSizeBody = (bannerHeight * 0.20f).coerceIn(18f, 34f)
 
-        val titlePaint = Paint().apply {
-            color = AndroidColor.WHITE
-            textSize = textSizeTitle
-            isAntiAlias = true
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
+            val titlePaint = Paint().apply {
+                color = AndroidColor.WHITE
+                textSize = textSizeTitle
+                isAntiAlias = true
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
 
-        val bodyPaint = Paint().apply {
-            color = AndroidColor.parseColor("#E0E0E0")
-            textSize = textSizeBody
-            isAntiAlias = true
-            typeface = Typeface.DEFAULT
-        }
+            val bodyPaint = Paint().apply {
+                color = AndroidColor.parseColor("#E0E0E0")
+                textSize = textSizeBody
+                isAntiAlias = true
+                typeface = Typeface.DEFAULT
+            }
 
-        val tagPaint = Paint().apply {
-            color = AndroidColor.parseColor("#64B5F6")
-            textSize = textSizeBody
-            isAntiAlias = true
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
+            val tagPaint = Paint().apply {
+                color = AndroidColor.parseColor("#64B5F6")
+                textSize = textSizeBody
+                isAntiAlias = true
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            }
 
-        val dateDisplay = SimpleDateFormat("dd MMM yyyy — HH:mm:ss 'WIT'", Locale.US).format(Date())
-        val coordText = if (lat != 0.0 || lng != 0.0) {
-            "Koor: ${String.format(Locale.US, "%.6f", lat)}, ${String.format(Locale.US, "%.6f", lng)}"
+            // Timezone formatting
+            val timeZone = if (settings.timezoneOption == TimezoneOption.AUTO) {
+                TimeZone.getDefault()
+            } else {
+                TimeZone.getTimeZone(settings.timezoneOption.zoneId)
+            }
+            val sdf = SimpleDateFormat("dd MMM yyyy — HH:mm:ss", Locale.US).apply {
+                this.timeZone = timeZone
+            }
+            val tzLabel = if (settings.timezoneOption == TimezoneOption.AUTO) {
+                timeZone.getDisplayName(timeZone.inDaylightTime(Date()), TimeZone.SHORT, Locale.US)
+            } else {
+                settings.timezoneOption.code
+            }
+            val dateDisplay = "${sdf.format(Date())} $tzLabel"
+
+            // Coordinate formatting
+            val coordPrecision = if (settings.isHighAccuracy) "%.6f" else "%.4f"
+            val coordText = if (!settings.isGpsActive) {
+                "Koor: GPS Nonaktif"
+            } else if (lat != 0.0 || lng != 0.0) {
+                "Koor: ${String.format(Locale.US, coordPrecision, lat)}, ${String.format(Locale.US, coordPrecision, lng)}"
+            } else {
+                "Koor: Menunggu GPS Lock"
+            }
+
+            val startX = 36f
+            val line1Y = h - bannerHeight + (bannerHeight * 0.32f)
+            val line2Y = h - bannerHeight + (bannerHeight * 0.62f)
+            val line3Y = h - bannerHeight + (bannerHeight * 0.88f)
+
+            canvas.drawText("TIANG: $poleCode", startX, line1Y, titlePaint)
+            canvas.drawText("$coordText  •  Waktu: $dateDisplay", startX, line2Y, bodyPaint)
+            canvas.drawText("LINTASARTA RNIMS FIELD SURVEY (MPO AS-BUILT) • ISO-27001", startX, line3Y, tagPaint)
+
+            watermarked
         } else {
-            "Koor: Menunggu GPS Lock"
+            processedBitmap
         }
 
-        val startX = 36f
-        val line1Y = h - bannerHeight + (bannerHeight * 0.32f)
-        val line2Y = h - bannerHeight + (bannerHeight * 0.62f)
-        val line3Y = h - bannerHeight + (bannerHeight * 0.88f)
-
-        canvas.drawText("TIANG: $poleCode", startX, line1Y, titlePaint)
-        canvas.drawText("$coordText  •  Waktu: $dateDisplay", startX, line2Y, bodyPaint)
-        canvas.drawText("LINTASARTA RNIMS FIELD SURVEY (MPO AS-BUILT) • ISO-27001", startX, line3Y, tagPaint)
-
-        // 6. Save compressed JPEG (Quality 80% to ensure file size < 500 KB)
+        // 6. Save JPEG: Quality 80% if compression enabled, otherwise 100% full quality
+        val quality = if (settings.isCompressionEnabled) 80 else 100
         FileOutputStream(photoFile).use { out ->
-            watermarkedBitmap.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
             out.flush()
         }
 
         // Clean up bitmaps
         if (rotatedBitmap != rawBitmap) rawBitmap.recycle()
-        if (scaledBitmap != rotatedBitmap) rotatedBitmap.recycle()
-        watermarkedBitmap.recycle()
-
-        // 7. Write EXIF GPS & SHA-256
-        if (lat != 0.0 || lng != 0.0) {
-            writeExifGps(photoFile, lat, lng)
-        } else {
-            writeSha256Exif(photoFile)
+        if (processedBitmap != rotatedBitmap) rotatedBitmap.recycle()
+        if (finalBitmap != processedBitmap) {
+            processedBitmap.recycle()
+            finalBitmap.recycle()
+        } else if (finalBitmap != rotatedBitmap && finalBitmap != rawBitmap) {
+            finalBitmap.recycle()
         }
 
-        Log.d("CameraHelper", "Photo compressed & watermarked: ${photoFile.length() / 1024} KB")
+        // 7. Write EXIF GPS & SHA-256 if isExifSaveActive is true
+        if (settings.isExifSaveActive) {
+            if (settings.isGpsActive && (lat != 0.0 || lng != 0.0)) {
+                writeExifGps(photoFile, lat, lng)
+            } else {
+                writeSha256Exif(photoFile)
+            }
+        }
+
+        Log.d("CameraHelper", "Photo saved: ${photoFile.length() / 1024} KB (Compressed: ${settings.isCompressionEnabled}, Watermark: ${settings.isWatermarkActive}, Quality: $quality%)")
     } catch (e: Exception) {
-        Log.e("CameraHelper", "Failed to compress/watermark photo: ${e.message}", e)
+        Log.e("CameraHelper", "Failed to process photo: ${e.message}", e)
     }
 }
 

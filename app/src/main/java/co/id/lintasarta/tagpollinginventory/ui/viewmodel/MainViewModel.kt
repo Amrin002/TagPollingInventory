@@ -16,6 +16,7 @@ import co.id.lintasarta.tagpollinginventory.location.LocationData
 import co.id.lintasarta.tagpollinginventory.location.LocationProvider
 import co.id.lintasarta.tagpollinginventory.data.auth.UserSession
 import co.id.lintasarta.tagpollinginventory.data.auth.UserSessionManager
+import co.id.lintasarta.tagpollinginventory.data.preferences.CameraSettingsManager
 import co.id.lintasarta.tagpollinginventory.network.ConnectionTestResult
 import co.id.lintasarta.tagpollinginventory.network.NetworkObserver
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
@@ -71,6 +72,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val userSessionManager = UserSessionManager(application)
     val currentUser: StateFlow<UserSession> = userSessionManager.currentSession
+
+    val cameraSettingsManager = CameraSettingsManager(application)
+    val cameraSettings: StateFlow<CameraSettings> = cameraSettingsManager.settings
+
+    fun updateCameraSettings(settings: CameraSettings) {
+        cameraSettingsManager.updateSettings(settings)
+    }
 
     val repository = InventoryRepository(application)
     val routeRepository = RouteRepository(application)
