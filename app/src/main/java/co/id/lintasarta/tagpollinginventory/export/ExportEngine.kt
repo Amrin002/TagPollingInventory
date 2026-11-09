@@ -77,23 +77,31 @@ class ExportEngine(private val context: Context) {
             zip.closeEntry()
 
             // 2. Masukkan file foto aktual tiang ke dalam folder images/
+            val addedPhotos = mutableSetOf<String>()
             for (pole in poles) {
                 if (!pole.photoPath.isNullOrEmpty()) {
                     val photoSrc = File(pole.photoPath)
                     val photoName = photoSrc.name
-                    val photoEntry = ZipEntry("images/$photoName")
-                    zip.putNextEntry(photoEntry)
-                    if (photoSrc.exists()) {
+                    if (photoSrc.exists() && photoSrc.length() > 0 && addedPhotos.add(photoName)) {
+                        val photoEntry = ZipEntry("images/$photoName")
+                        zip.putNextEntry(photoEntry)
                         zip.write(photoSrc.readBytes())
-                    } else {
-                        val dummy = createDummyJpgBytes(pole.effectiveAssetUid)
-                        zip.write(dummy)
+                        zip.closeEntry()
                     }
-                    zip.closeEntry()
                 }
             }
         }
         return file
+    }
+
+    private fun escapeXml(input: String?): String {
+        if (input == null) return ""
+        return input
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\"", "&quot;")
+            .replace("'", "&apos;")
     }
 
     private fun generateAlpacaKmlContent(
@@ -105,8 +113,8 @@ class ExportEngine(private val context: Context) {
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
         sb.append("<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n")
         sb.append("  <Document>\n")
-        sb.append("    <name>Alpaca Master Poles - $segmentName</name>\n")
-        sb.append("    <description>Project Alpaca PRA Survey & As-Built Poles (Regional MPO)</description>\n\n")
+        sb.append("    <name>Alpaca Master Poles - ${escapeXml(segmentName)}</name>\n")
+        sb.append("    <description>Project Alpaca PRA Survey &amp; As-Built Poles (Regional MPO)</description>\n\n")
 
         // Styles untuk P7 (Orange) & P9 (Cyan/Biru) & Safety Deferral (Merah)
         sb.append("    <Style id=\"p9Pole\">\n")
@@ -143,7 +151,7 @@ class ExportEngine(private val context: Context) {
         // 1. Garis Polyline Jalur Fiber Optik
         if (importedRoute != null && importedRoute.coordinates.isNotEmpty()) {
             sb.append("    <Placemark>\n")
-            sb.append("      <name>Rute Kabel FO - ${importedRoute.name}</name>\n")
+            sb.append("      <name>Rute Kabel FO - ${escapeXml(importedRoute.name)}</name>\n")
             sb.append("      <styleUrl>#fiberRouteLine</styleUrl>\n")
             sb.append("      <LineString>\n")
             sb.append("        <coordinates>\n")
@@ -163,10 +171,11 @@ class ExportEngine(private val context: Context) {
                 else -> "#p9Pole"
             }
 
-            val photoFileName = if (!pole.photoPath.isNullOrEmpty()) File(pole.photoPath).name else null
+            val photoFile = if (!pole.photoPath.isNullOrEmpty()) File(pole.photoPath) else null
+            val photoFileName = if (photoFile != null && photoFile.exists() && photoFile.length() > 0) photoFile.name else null
 
             sb.append("    <Placemark>\n")
-            sb.append("      <name>${pole.effectiveAssetUid}</name>\n")
+            sb.append("      <name>${escapeXml(pole.effectiveAssetUid)}</name>\n")
             sb.append("      <styleUrl>$styleUrl</styleUrl>\n")
 
             // HTML Description CDATA
@@ -201,15 +210,15 @@ class ExportEngine(private val context: Context) {
 
             // ExtendedData untuk integrasi sistem Alpaca / eNims
             sb.append("      <ExtendedData>\n")
-            sb.append("        <Data name=\"asset_uid\"><value>${pole.effectiveAssetUid}</value></Data>\n")
-            sb.append("        <Data name=\"asset_class\"><value>${pole.assetClass}</value></Data>\n")
-            sb.append("        <Data name=\"asset_type\"><value>${pole.assetType}</value></Data>\n")
-            sb.append("        <Data name=\"po_id\"><value>${pole.poId}</value></Data>\n")
-            sb.append("        <Data name=\"segment_id\"><value>${pole.segmentId}</value></Data>\n")
+            sb.append("        <Data name=\"asset_uid\"><value>${escapeXml(pole.effectiveAssetUid)}</value></Data>\n")
+            sb.append("        <Data name=\"asset_class\"><value>${escapeXml(pole.assetClass)}</value></Data>\n")
+            sb.append("        <Data name=\"asset_type\"><value>${escapeXml(pole.assetType)}</value></Data>\n")
+            sb.append("        <Data name=\"po_id\"><value>${escapeXml(pole.poId)}</value></Data>\n")
+            sb.append("        <Data name=\"segment_id\"><value>${escapeXml(pole.segmentId)}</value></Data>\n")
             sb.append("        <Data name=\"accuracy\"><value>${pole.accuracy}</value></Data>\n")
             sb.append("        <Data name=\"is_safety_deferred\"><value>${pole.isSafetyDeferred}</value></Data>\n")
-            sb.append("        <Data name=\"match_status\"><value>${pole.matchStatus}</value></Data>\n")
-            sb.append("        <Data name=\"sync_status\"><value>${pole.syncStatus}</value></Data>\n")
+            sb.append("        <Data name=\"match_status\"><value>${escapeXml(pole.matchStatus)}</value></Data>\n")
+            sb.append("        <Data name=\"sync_status\"><value>${escapeXml(pole.syncStatus)}</value></Data>\n")
             sb.append("      </ExtendedData>\n")
 
             sb.append("      <Point>\n")
