@@ -193,3 +193,46 @@ Saat file `Alpaca_Master.kmz` hasil export dibuka di aplikasi Google Earth Deskt
 - **Git Commit**: `fe2cf57` (`fix(export): escape XML entities in KML and ensure valid KMZ for Google Earth`) telah di-push ke branch `master`.
 - **Salinan File Siap Pakai**: Salinan file KMZ yang telah terverifikasi telah diletakkan di direktori Downloads lokal (`%USERPROFILE%\Downloads\Alpaca_Master.kmz`).
 
+---
+
+## 6. Implementasi Live User GPS Marker & Accuracy Halo di Seluruh Peta
+
+### Masalah yang Ditemukan
+Titik penanda lokasi pengguna (Surveyor GPS marker) tidak muncul pada tampilan peta (`AreaOverviewMapScreen` / Tab Peta, `SegmentDetailScreen` / Detail Segmen, dan `OsmMapView` / Peta Lapangan).
+
+### Root Cause Analysis (Penyebab Utama)
+1. **Pembaruan Lokasi Tidak Diaktifkan Otomatis**:
+   `MainViewModel.startLocationUpdates()` hanya dipanggil saat masuk ke alur survei tiang lapangan (`FieldMapScreen`, `QuickTaggingSessionScreen`), tetapi **tidak pernah dipanggil** saat membuka Tab Peta (`AreaOverviewMapScreen`) maupun Layar Detail Segmen (`SegmentDetailScreen`).
+2. **Filter Akurasi Terlalu Ketat di `LocationProvider.kt`**:
+   Filter awal `accuracy > 50f` langsung membuang seluruh sampel lokasi jika akurasi > 50 meter. Pada saat pengujian di dalam ruangan / meja kerja, sinyal Fused Location atau BTS seluler/Wi-Fi umumnya memiliki akurasi 50–100m sehingga status lokasi selalu dianggap `isAvailable = false`.
+3. **Parameter `setWaitForAccurateLocation(true)`**:
+   Membuat Fused Location Provider menunggu kuncian satelit GNSS murni dan menunda pengiriman lokasi instan.
+4. **Visual Marker Kurang Kontras**:
+   Marker lama berupa lingkaran biru kecil 36px tanpa lingkaran radius akurasi (`accuracy circle`), sehingga mudah tertutup oleh garis polyline segmen fiber optik.
+5. **Tombol "Lokasi Saya" Salah Arah di `OsmMapView.kt`**:
+   Floating Action Button dengan ikon GPS sebelumnya memusatkan kamera ke rute kabel FO (`"Peta dipusatkan ke rute segmen"`), bukan ke koordinat GPS surveyor.
+
+### Tindakan Perbaikan
+1. **Komponen Standar [`UserLocationOverlayHelper.kt`](file:///d:/PROJECT%20RNIMS/TagPollingInventory/app/src/main/java/co/id/lintasarta/tagpollinginventory/ui/components/UserLocationOverlayHelper.kt)**:
+   - Dibuat ikon penanda surveyor modern ala Google Maps / GIS: lingkaran luar putih tebal, inti Electric Blue (`#1A73E8`), dan titik putih poros presisi.
+   - Menambahkan lingkaran radius akurasi GPS dinamis (`Polygon.pointsAsCircle`) dengan warna soft translucent blue (`#261A73E8`) yang merefleksikan radius akurasi aktual.
+   - Memastikan overlay user selalu diposisikan di lapisan paling atas (`Z-Index`).
+2. **Optimasi `LocationProvider.kt`**:
+   - Pengambilan instan `lastKnownLocation` dari semua provider (`GPS`, `NETWORK`, `PASSIVE`) saat `startLocationUpdates()` dipanggil.
+   - Menonaktifkan blocking: `setWaitForAccurateLocation(false)`.
+   - Menaikkan batas filter awal hingga 300m agar titik lokasi langsung muncul di peta saat awal aplikasi dibuka, lalu otomatis menyempit seiring kuncian satelit GNSS.
+3. **Pemicu Otomatis di ViewModel & Siklus Hidup**:
+   - `MainViewModel.init`: Otomatis memanggil `startLocationUpdates()` jika izin GPS sudah diberikan.
+   - `MainActivity.onResume`: Memastikan listener lokasi selalu aktif saat aplikasi kembali ke foreground.
+   - `AreaOverviewMapScreen` & `SegmentDetailScreen`: Menambahkan `LaunchedEffect(Unit) { viewModel.startLocationUpdates() }`.
+4. **Pemisahan Kontrol Peta di `OsmMapView.kt`**:
+   - Tombol **"Lokasi Saya"** (ikon GPS): Memusatkan kamera langsung ke koordinat surveyor (`GeoPoint(userLocation.latitude, userLocation.longitude)`).
+   - Tombol **"Pusatkan Rute"** (ikon CenterFocus): Memusatkan kamera ke rute kabel fiber optik segmen.
+
+### Hasil Verifikasi & Deploy
+- **Build**: `BUILD SUCCESSFUL in 5m 23s`.
+- **Deploy**: APK debug terbaru berhasil diinstal langsung ke perangkat fisik Motorola Moto G67 Power 5G (`ZP2222V74L`).
+- **Verifikasi Dumpsys**: Listener lokasi terdaftar aktif di sistem Android (`Request[@+1s0ms HIGH_ACCURACY, WorkSource{co.id.lintasarta.tagpollinginventory}]`).
+- **Git Commit**: `a7d3fe1` (`feat(map): display prominent live surveyor GPS location marker and accuracy halo across all map views`) telah di-push ke branch `master`.
+
+
