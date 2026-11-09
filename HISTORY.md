@@ -141,7 +141,55 @@ Dokumen ini mencatat riwayat perubahan kode, arsitektur integrasi, dan pengujian
 2. **Proteksi File Arsitektur**:
    File `POLE_INVENTORY_ARCHITECTURE.md` dipertahankan di root lokal dan dijaga dalam `.gitignore` sehingga tidak pernah ikut ter-commit ke git.
 3. **Commit & Push Git**:
-   - **Commit SHA**: `448d022`
-   - **Pesan Commit**: `refactor: clean up non-android files to archive, add email validation & dynamic roles, and configure pole sync to local redis endpoint`
+   - **Commit SHA**: `448d022` & `6ab026b`
+   - **Pesan Commit**: `refactor: clean up non-android files to archive, add email validation & dynamic roles, and configure pole sync to local redis endpoint` & `docs: add comprehensive project and sync history documentation`
    - **Remote Branch**: `https://github.com/Amrin002/TagPollingInventory.git` (`origin/master`)
    - **Status Working Tree**: `working tree clean`
+
+---
+
+## 5. Perbaikan Bug Export KMZ Google Earth (Parse Error Line 5 Column 44)
+
+### Masalah yang Ditemukan
+Saat file `Alpaca_Master.kmz` hasil export dibuka di aplikasi Google Earth Desktop, muncul dialog error:
+> `Open of file "Alpaca_Master.kmz" failed: Parse error at line 5, column 44: not well-formed (invalid token)`
+
+### Root Cause Analysis (Penyebab Utama)
+1. **Unescaped XML Entity `&`**:
+   Pada `ExportEngine.kt`, tag `<description>` dituliskan:
+   ```xml
+   <description>Project Alpaca PRA Survey & As-Built Poles (Regional MPO)</description>
+   ```
+   Karakter literal `&` pada kolom 44 melanggar spesifikasi standar XML 1.0 (Google Earth XML parser menolak token `&` tanpa entitas `&amp;`).
+2. **Karakter Dinamis Tanpa Sanitasi**:
+   Semua data dinamis seperti `segmentName`, `effectiveAssetUid`, `assetClass`, `assetType`, `poId`, `segmentId`, `matchStatus`, dan `syncStatus` sebelumnya belum disanitasi terhadap karakter khusus XML (`&`, `<`, `>`, `"`, `'`).
+3. **Packaging ZIP KMZ**:
+   Entry foto yang kosong atau duplicate dapat menimbulkan korupsi arsip ZIP.
+
+### Tindakan Perbaikan (`ExportEngine.kt`)
+1. **Menambahkan Fungsi Sanitasi Entitas XML**:
+   ```kotlin
+   private fun escapeXml(input: String?): String {
+       if (input == null) return ""
+       return input
+           .replace("&", "&amp;")
+           .replace("<", "&lt;")
+           .replace(">", "&gt;")
+           .replace("\"", "&quot;")
+           .replace("'", "&apos;")
+   }
+   ```
+2. **Sanitasi Tag Description & Seluruh Node Dinamis**:
+   - Header Dokumen: `<description>Project Alpaca PRA Survey &amp; As-Built Poles (Regional MPO)</description>`
+   - Semua nama Placemark, rute kabel FO, dan nilai `<ExtendedData>` dibungkus dengan `escapeXml()`.
+3. **Deduplikasi dan Validasi File Foto Aktual**:
+   Menambahkan `mutableSetOf<String>()` untuk mencegah duplikasi entry dalam arsip ZIP KMZ dan memastikan hanya foto fisik yang ada (`exists() && length() > 0`) yang dimasukkan ke folder `images/`.
+
+### Hasil Verifikasi & Pengujian
+- **Kompilasi & Build**: Berhasil dikompilasi ke APK debug (`BUILD SUCCESSFUL`).
+- **Instalasi ke Perangkat Fisik**: Terpasang live di Motorola Moto G67 Power 5G (`ZP2222V74L`).
+- **Uji Ekspor Langsung**: Tombol "Export Alpaca Master KMZ" ditekan di aplikasi, menghasilkan file KMZ baru sebesar ±14.6 MB.
+- **Validasi Parsing XML**: File `doc.kml` di dalam `Alpaca_Master.kmz` diekstrak dan diuji menggunakan XML Parser `xml.etree.ElementTree`. Hasil: **100% Valid & Well-Formed**, tanpa ada syntax error.
+- **Git Commit**: `fe2cf57` (`fix(export): escape XML entities in KML and ensure valid KMZ for Google Earth`) telah di-push ke branch `master`.
+- **Salinan File Siap Pakai**: Salinan file KMZ yang telah terverifikasi telah diletakkan di direktori Downloads lokal (`%USERPROFILE%\Downloads\Alpaca_Master.kmz`).
+
