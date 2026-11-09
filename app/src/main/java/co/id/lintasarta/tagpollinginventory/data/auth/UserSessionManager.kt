@@ -15,10 +15,12 @@ import java.util.Locale
 data class UserSession(
     val userId: Int = 1042,
     val username: String = "surveyor_mpo",
+    val email: String = "surveyor.mpo@lintasarta.co.id",
     val displayName: String = "Field Engineer MPO",
     val areaId: Int = 18,
     val areaLabel: String = "MPO",
-    val role: String = "SURVEYOR",
+    val role: String = "Field Engineer MPO",
+    val roleLabel: String = "Field Operations",
     val token: String? = "bearer_offline_token_mpo",
     val isLoggedIn: Boolean = true,
     val isOfflineSession: Boolean = true,
@@ -46,10 +48,12 @@ class UserSessionManager(private val context: Context) {
         return UserSession(
             userId = 0,
             username = "",
+            email = "",
             displayName = "",
             areaId = 18,
             areaLabel = "MPO",
-            role = "SURVEYOR",
+            role = "Field Engineer MPO",
+            roleLabel = "Field Operations",
             token = null,
             isLoggedIn = false,
             isOfflineSession = false,
@@ -58,24 +62,26 @@ class UserSessionManager(private val context: Context) {
     }
 
     fun hasActiveSession(): Boolean {
-        return _currentSession.value.isLoggedIn && _currentSession.value.username.isNotBlank()
+        return _currentSession.value.isLoggedIn && (_currentSession.value.username.isNotBlank() || _currentSession.value.email.isNotBlank())
     }
 
     private fun saveSessionToPrefs(session: UserSession) {
         prefs.edit().putString("user_session_json", gson.toJson(session)).apply()
     }
 
-    suspend fun loginOnline(baseUrl: String, username: String, pass: String): Result<UserSession> {
-        val result = RnimsApiClient.login(baseUrl, username, pass)
+    suspend fun loginOnline(baseUrl: String, emailOrUsername: String, pass: String): Result<UserSession> {
+        val result = RnimsApiClient.login(baseUrl, emailOrUsername, pass)
         return result.map { rnimsUser ->
             val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
             val session = UserSession(
                 userId = rnimsUser.userId,
-                username = rnimsUser.username ?: username,
+                username = rnimsUser.username ?: if (emailOrUsername.contains("@")) emailOrUsername.substringBefore("@") else emailOrUsername,
+                email = rnimsUser.email ?: if (emailOrUsername.contains("@")) emailOrUsername else "$emailOrUsername@lintasarta.co.id",
                 displayName = rnimsUser.displayName.ifEmpty { "Field Engineer ${rnimsUser.areaLabel}" },
                 areaId = rnimsUser.areaId,
                 areaLabel = rnimsUser.areaLabel,
-                role = rnimsUser.role ?: "SURVEYOR",
+                role = rnimsUser.role ?: "Field Engineer MPO",
+                roleLabel = rnimsUser.roleLabel ?: "Field Operations",
                 token = "bearer_token_online_${rnimsUser.userId}",
                 isLoggedIn = true,
                 isOfflineSession = false,
@@ -98,15 +104,18 @@ class UserSessionManager(private val context: Context) {
         saveSessionToPrefs(updated)
     }
 
-    fun loginOffline(username: String = "surveyor", pin: String = "1234", areaId: Int = 18, areaLabel: String = "MPO"): UserSession {
+    fun loginOffline(emailOrUser: String = "surveyor.mpo@lintasarta.co.id", pin: String = "1234", areaId: Int = 18, areaLabel: String = "MPO"): UserSession {
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+        val (calcRole, calcRoleLabel) = RnimsApiClient.resolveUserRole(emailOrUser, null, 3)
         val session = UserSession(
             userId = 1042,
-            username = username,
-            displayName = "Field Engineer $areaLabel",
+            username = if (emailOrUser.contains("@")) emailOrUser.substringBefore("@") else emailOrUser,
+            email = if (emailOrUser.contains("@")) emailOrUser else "$emailOrUser@lintasarta.co.id",
+            displayName = "Offline Surveyor ($areaLabel)",
             areaId = areaId,
             areaLabel = areaLabel,
-            role = "SURVEYOR",
+            role = calcRole,
+            roleLabel = calcRoleLabel,
             token = "bearer_offline_token_$areaId",
             isLoggedIn = true,
             isOfflineSession = true,
@@ -122,10 +131,12 @@ class UserSessionManager(private val context: Context) {
         val guest = UserSession(
             userId = 0,
             username = "",
+            email = "",
             displayName = "Offline Surveyor",
             areaId = 18,
             areaLabel = "MPO",
             role = "GUEST",
+            roleLabel = "Field Operations",
             token = null,
             isLoggedIn = false,
             isOfflineSession = true,

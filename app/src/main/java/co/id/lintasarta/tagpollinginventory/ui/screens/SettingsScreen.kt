@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -182,7 +183,7 @@ fun SettingsScreenContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "AKUN SURVEYOR",
+                        text = "PROFIL PENGGUNA RNIMS",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray
@@ -206,31 +207,67 @@ fun SettingsScreenContent(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    val avatarBg = when {
+                        currentUser.role.contains("Admin", ignoreCase = true) -> Color(0xFFF3E5F5)
+                        currentUser.role.contains("Manager", ignoreCase = true) -> Color(0xFFE3F2FD)
+                        else -> Color(0xFFE8F5E9)
+                    }
+                    val avatarIconColor = when {
+                        currentUser.role.contains("Admin", ignoreCase = true) -> Color(0xFF6A1B9A)
+                        currentUser.role.contains("Manager", ignoreCase = true) -> Color(0xFF1565C0)
+                        else -> Color(0xFF2E7D32)
+                    }
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(Color(0xFFE3F2FD), RoundedCornerShape(22.dp)),
+                            .background(avatarBg, RoundedCornerShape(22.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
                             contentDescription = null,
-                            tint = TelecomPrimary,
+                            tint = avatarIconColor,
                             modifier = Modifier.size(24.dp)
                         )
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = currentUser.displayName.ifEmpty { "Field Surveyor" },
+                            text = currentUser.displayName.ifEmpty { "Field Engineer" },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = "@${currentUser.username} • Role: ${currentUser.role}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.Gray
-                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val (roleBadgeBg, roleBadgeColor) = when {
+                                currentUser.role.contains("Admin", ignoreCase = true) -> Color(0xFFF3E5F5) to Color(0xFF6A1B9A)
+                                currentUser.role.contains("Manager", ignoreCase = true) -> Color(0xFFE3F2FD) to Color(0xFF1565C0)
+                                else -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = roleBadgeBg
+                            ) {
+                                Text(
+                                    text = currentUser.role,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = roleBadgeColor,
+                                    fontSize = 10.sp
+                                )
+                            }
+                            Text(
+                                text = currentUser.email.ifEmpty { currentUser.username },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 
@@ -247,14 +284,14 @@ fun SettingsScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Area Operasional Surveyor:", fontSize = 11.sp, color = Color.Gray)
+                            Text("Area Operasional:", fontSize = 11.sp, color = Color.Gray)
                             Text(
                                 "Area ${currentUser.areaId} - ${currentUser.areaLabel}",
                                 fontWeight = FontWeight.ExtraBold,
                                 color = TelecomPrimary
                             )
                             Text(
-                                "Sesuai profil akun surveyor yang login",
+                                "Sesuai profil akun yang login",
                                 fontSize = 10.sp,
                                 color = Color.Gray
                             )

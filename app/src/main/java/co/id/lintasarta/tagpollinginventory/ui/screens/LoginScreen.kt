@@ -93,7 +93,7 @@ fun LoginScreenContent(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
 
-    var username by remember { mutableStateOf("surveyor_mpo") }
+    var email by remember { mutableStateOf("surveyor.mpo@lintasarta.co.id") }
     var password by remember { mutableStateOf("password123") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoggingIn by remember { mutableStateOf(false) }
@@ -380,28 +380,24 @@ fun LoginScreenContent(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "Masuk ke Akun Surveyor",
+                            text = "Masuk ke Sistem RNIMS",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF1E293B)
                         )
-                        Text(
-                            text = "Masukkan kredensial RNIMS Anda untuk autentikasi awal profil & otorisasi survei lapangan.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF64748B)
-                        )
                     }
 
-                    // Field Username / Email
+                    // Field Email Resmi
                     OutlinedTextField(
-                        value = username,
+                        value = email,
                         onValueChange = {
-                            username = it
+                            email = it
                             errorMessage = null
                         },
-                        label = { Text("Username atau Email") },
+                        label = { Text("Email Resmi RNIMS") },
+                        placeholder = { Text("contoh: user@lintasarta.co.id") },
                         leadingIcon = {
-                            Icon(Icons.Default.Person, contentDescription = null, tint = TelecomPrimary)
+                            Icon(Icons.Default.Email, contentDescription = null, tint = TelecomPrimary)
                         },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
@@ -441,10 +437,15 @@ fun LoginScreenContent(
                         keyboardActions = KeyboardActions(
                             onDone = {
                                 focusManager.clearFocus()
-                                if (username.isNotBlank() && password.isNotBlank()) {
+                                val trimmed = email.trim()
+                                if (trimmed.isBlank() || password.isBlank()) {
+                                    errorMessage = "Email dan password tidak boleh kosong"
+                                } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmed).matches()) {
+                                    errorMessage = "Format email tidak valid. Masukkan email resmi yang memuat '@' (contoh: user@lintasarta.co.id)"
+                                } else {
                                     isLoggingIn = true
                                     errorMessage = null
-                                    onLogin(username, password) { success, msg ->
+                                    onLogin(trimmed, password) { success, msg ->
                                         isLoggingIn = false
                                         if (!success) errorMessage = msg
                                     }
@@ -487,13 +488,18 @@ fun LoginScreenContent(
                     Button(
                         onClick = {
                             focusManager.clearFocus()
-                            if (username.isBlank() || password.isBlank()) {
-                                errorMessage = "Username dan password tidak boleh kosong"
+                            val trimmed = email.trim()
+                            if (trimmed.isBlank() || password.isBlank()) {
+                                errorMessage = "Email dan password tidak boleh kosong"
+                                return@Button
+                            }
+                            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(trimmed).matches()) {
+                                errorMessage = "Format email tidak valid. Masukkan email resmi yang memuat '@' (contoh: user@lintasarta.co.id atau admin@bewithdhanu.in)"
                                 return@Button
                             }
                             isLoggingIn = true
                             errorMessage = null
-                            onLogin(username, password) { success, msg ->
+                            onLogin(trimmed, password) { success, msg ->
                                 isLoggingIn = false
                                 if (!success) {
                                     errorMessage = msg
@@ -576,20 +582,20 @@ fun LoginScreenContent(
                                 tint = Color(0xFF16A34A),
                                 modifier = Modifier.size(18.dp).padding(top = 2.dp)
                             )
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = "Operasional Lapangan 100% Offline",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF15803D)
-                                )
-                                Text(
-                                    text = "Login online diperlukan satu kali saat awal. Setelah berhasil, profil dan 143 rute segmen tersimpan aman di perangkat sehingga survei tiang dapat langsung dikerjakan di lokasi tanpa sinyal internet.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF334155),
-                                    lineHeight = 16.sp
-                                )
-                            }
+//                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+//                                Text(
+//                                    text = "Operasional Lapangan 100% Offline",
+//                                    style = MaterialTheme.typography.labelSmall,
+//                                    fontWeight = FontWeight.Bold,
+//                                    color = Color(0xFF15803D)
+//                                )
+//                                Text(
+//                                    text = "Login online diperlukan satu kali saat awal. Setelah berhasil, profil dan 143 rute segmen tersimpan aman di perangkat sehingga survei tiang dapat langsung dikerjakan di lokasi tanpa sinyal internet.",
+//                                    style = MaterialTheme.typography.bodySmall,
+//                                    color = Color(0xFF334155),
+//                                    lineHeight = 16.sp
+//                                )
+//                            }
                         }
                     }
                 }
@@ -612,7 +618,7 @@ fun LoginScreenContent(
                     color = Color(0xFF64748B)
                 )
                 Text(
-                    text = "Regional Operations • Lintasarta Telecom • v1.0.0",
+                    text = "Regional Operations • v1.0.0",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFF94A3B8),
                     textAlign = TextAlign.Center

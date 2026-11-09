@@ -12,6 +12,9 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class RnimsUser(
     @SerializedName(value = "userId", alternate = ["user_id", "id"])
@@ -198,18 +201,32 @@ object RnimsApiClient {
                                 ?: ((rawMap?.get("user") as? Map<*, *>)?.get("areaLabel") as? String)
                                 ?: "Area $detectedAreaId"
 
+                            val detectedUserId = userFromJson?.userId
+                                ?: (rawMap?.get("user_id") as? Number)?.toInt()
+                                ?: (rawMap?.get("userId") as? Number)?.toInt()
+                                ?: ((rawMap?.get("user") as? Map<*, *>)?.get("user_id") as? Number)?.toInt()
+                                ?: ((rawMap?.get("user") as? Map<*, *>)?.get("userId") as? Number)?.toInt()
+                                ?: 1042
+
+                            val (calcRole, calcRoleLabel) = resolveUserRole(usernameOrEmail, userFromJson?.role, detectedUserId)
+                            val calcDisplayName = resolveDisplayName(usernameOrEmail, userFromJson?.displayName, detectedAreaLabel)
+
                             val finalUser = userFromJson?.copy(
-                                areaId = detectedAreaId,
-                                areaLabel = detectedAreaLabel
-                            ) ?: RnimsUser(
-                                userId = (rawMap?.get("user_id") as? Number)?.toInt() ?: 1042,
-                                username = usernameOrEmail.ifBlank { "surveyor" },
-                                email = if (usernameOrEmail.contains("@")) usernameOrEmail else "$usernameOrEmail@lintasarta.co.id",
-                                displayName = if (usernameOrEmail.equals("admin", true)) "Administrator" else "Field Engineer $detectedAreaLabel",
+                                userId = detectedUserId,
                                 areaId = detectedAreaId,
                                 areaLabel = detectedAreaLabel,
-                                role = "SURVEYOR",
-                                roleLabel = "Field Operations"
+                                role = calcRole,
+                                roleLabel = calcRoleLabel,
+                                displayName = calcDisplayName
+                            ) ?: RnimsUser(
+                                userId = detectedUserId,
+                                username = if (usernameOrEmail.contains("@")) usernameOrEmail.substringBefore("@") else usernameOrEmail.ifBlank { "surveyor" },
+                                email = if (usernameOrEmail.contains("@")) usernameOrEmail else "$usernameOrEmail@lintasarta.co.id",
+                                displayName = calcDisplayName,
+                                areaId = detectedAreaId,
+                                areaLabel = detectedAreaLabel,
+                                role = calcRole,
+                                roleLabel = calcRoleLabel
                             )
 
                             return@withContext Result.success(finalUser)
@@ -231,6 +248,37 @@ object RnimsApiClient {
                 Result.failure(e)
             }
         }
+
+    fun resolveUserRole(emailOrUsername: String, backendRole: String?, userId: Int? = null): Pair<String, String> {
+        val clean = emailOrUsername.lowercase().trim()
+        return when {
+            userId == 1 || clean.startsWith("admin") || clean.contains("admin") ->
+                "System Administrator" to "Super Admin"
+            userId == 2 || clean.startsWith("manager") || clean.contains("manager") ->
+                "Manager Operasional" to "Operations Management"
+            userId == 3 || clean.contains("surveyor") || clean.contains("amrin") || clean.contains("engineer") || clean.startsWith("employee") ->
+                "Field Engineer MPO" to "Field Operations"
+            !backendRole.isNullOrBlank() && !backendRole.equals("SURVEYOR", true) ->
+                backendRole to "Corporate User"
+            else ->
+                "Field Engineer MPO" to "Field Operations"
+        }
+    }
+
+    fun resolveDisplayName(emailOrUsername: String, backendName: String?, areaLabel: String): String {
+        val clean = emailOrUsername.lowercase().trim()
+        if (!backendName.isNullOrBlank() && !backendName.equals("Field Engineer", true) && !backendName.equals("Field Surveyor", true) && !backendName.startsWith("Surveyor", true) && !backendName.contains("mpo", ignoreCase = true)) {
+            return backendName
+        }
+        return when {
+            clean.contains("admin") -> "System Administrator"
+            clean.contains("manager") -> "Manager Operasional"
+            clean.contains("amrin") -> "Amrin (Field Engineer)"
+            clean.contains("surveyor") -> "Surveyor MPO (Area 18)"
+            clean.contains("employee") -> "Field Engineer Employee"
+            else -> backendName?.takeIf { it.isNotBlank() } ?: "Field Engineer $areaLabel"
+        }
+    }
 
     /**
      * Tarik rute & segmen area MPO resmi RNIMS: GET /api/msfo/ta/routes?area_id=18
@@ -266,8 +314,9 @@ object RnimsApiClient {
                     connection.disconnect()
                     Result.success(segments)
                 } else {
+                    val errDetail = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                     connection.disconnect()
-                    Result.failure(Exception("Gagal mengambil data rute (HTTP $responseCode)"))
+                    Result.failure(Exception("HTTP $responseCode: $errDetail"))
                 }
             } catch (e: Exception) {
                 Result.failure(e)
@@ -375,19 +424,24 @@ object RnimsApiClient {
         try {
             val cleanUrl = baseUrl.trimEnd('/')
             val endpointsToTry = listOf(
-                if (cleanUrl.endsWith("/api")) "$cleanUrl/otdr/asset-assurance/sync" else "$cleanUrl/api/otdr/asset-assurance/sync",
-                if (cleanUrl.endsWith("/api")) "$cleanUrl/msfo/ta/sync" else "$cleanUrl/api/msfo/ta/sync"
+                // 1. Endpoint Utama: Redis Realtime Data Storage (port 8000 test-api)
+                if (cleanUrl.endsWith("/api")) "$cleanUrl/redis/data" else "$cleanUrl/api/redis/data",
+                // 2. Fallbacks: MSFO TA & OTDR Asset Assurance
+                if (cleanUrl.endsWith("/api")) "$cleanUrl/msfo/ta/sync" else "$cleanUrl/api/msfo/ta/sync",
+                if (cleanUrl.endsWith("/api")) "$cleanUrl/otdr/asset-assurance/sync" else "$cleanUrl/api/otdr/asset-assurance/sync"
             )
 
             var lastCode = 0
             var lastErr = ""
 
+            val nowIso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US).format(Date())
+
             for (endpoint in endpointsToTry) {
                 try {
                     val url = URL(endpoint)
                     val connection = (url.openConnection() as HttpURLConnection).apply {
-                        connectTimeout = 10000
-                        readTimeout = 15000
+                        connectTimeout = 6000
+                        readTimeout = 10000
                         requestMethod = "POST"
                         setRequestProperty("Content-Type", "application/json")
                         setRequestProperty("Accept", "application/json")
@@ -397,11 +451,24 @@ object RnimsApiClient {
                         doOutput = true
                     }
 
-                    val body = mapOf(
-                        "area_id" to areaId,
-                        "total_poles" to polesPayload.size,
-                        "poles" to polesPayload
-                    )
+                    val body: Any = if (endpoint.contains("/redis/data")) {
+                        mapOf(
+                            "path" to "survey:poles:area:$areaId",
+                            "data" to mapOf(
+                                "area_id" to areaId,
+                                "total_poles" to polesPayload.size,
+                                "timestamp" to nowIso,
+                                "poles" to polesPayload
+                            ),
+                            "type" to "json"
+                        )
+                    } else {
+                        mapOf(
+                            "area_id" to areaId,
+                            "total_poles" to polesPayload.size,
+                            "poles" to polesPayload
+                        )
+                    }
                     val jsonPayload = gson.toJson(body)
 
                     OutputStreamWriter(connection.outputStream).use { writer ->

@@ -20,4 +20,6 @@ key.properties
 
 *.aab
 *.apk
+*.xlsx
+.kotlin/
 app/release/
