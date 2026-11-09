@@ -55,6 +55,10 @@ fun AreaOverviewMapScreen(
     val currentUser by viewModel.currentUser.collectAsState()
     val currentLocation by viewModel.currentLocation.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.startLocationUpdates()
+    }
+
     var selectedFilterKey by remember { mutableStateOf("SEMUA") }
     var selectedSegment by remember { mutableStateOf<Segment?>(null) }
     var osmMapViewInstance by remember { mutableStateOf<MapView?>(null) }
@@ -374,7 +378,11 @@ fun AreaOverviewMapScreen(
                             osmMapViewInstance?.controller?.animateTo(
                                 GeoPoint(currentLocation.latitude, currentLocation.longitude)
                             )
-                            osmMapViewInstance?.controller?.setZoom(16.0)
+                            osmMapViewInstance?.controller?.setZoom(16.5)
+                            android.widget.Toast.makeText(context, "Peta dipusatkan ke lokasi Anda", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.startLocationUpdates()
+                            android.widget.Toast.makeText(context, "Mencari sinyal GPS surveyor...", android.widget.Toast.LENGTH_SHORT).show()
                         }
                     },
                     containerColor = Color.White,

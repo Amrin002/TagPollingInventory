@@ -111,6 +111,7 @@ fun OsmSegmentDetailMapView(
     // Reference untuk overlay rute, marker tiang, dan user location
     val poleMarkers = remember { mutableMapOf<String, Marker>() }
     var userMarker by remember { mutableStateOf<Marker?>(null) }
+    var userCircle by remember { mutableStateOf<org.osmdroid.views.overlay.Polygon?>(null) }
     var lastFittedSegmentId by remember { mutableStateOf<String?>(null) }
 
     // Fungsi helper untuk menghitung bounding box dan animasi fokus
@@ -251,36 +252,17 @@ fun OsmSegmentDetailMapView(
         mapView.postInvalidate()
     }
 
-    // 3. Pembaruan posisi GPS surveyor
+    // 3. Pembaruan posisi GPS surveyor menggunakan UserLocationOverlayHelper
     LaunchedEffect(userLocation) {
-        if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
-            val userGeoPoint = GeoPoint(userLocation.latitude, userLocation.longitude)
-            if (userMarker == null) {
-                val marker = Marker(mapView).apply {
-                    title = "Lokasi Saya"
-                    snippet = "Akurasi ±${userLocation.accuracy}m"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    val userShape = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(AndroidColor.parseColor("#0288D1"))
-                        setStroke(4, AndroidColor.WHITE)
-                        setSize(36, 36)
-                    }
-                    icon = userShape
-                }
-                userMarker = marker
-                mapView.overlays.add(marker)
-            }
-            userMarker?.position = userGeoPoint
-            userMarker?.snippet = "Akurasi ±${userLocation.accuracy}m"
-            mapView.postInvalidate()
-        } else {
-            userMarker?.let {
-                mapView.overlays.remove(it)
-                userMarker = null
-                mapView.postInvalidate()
-            }
-        }
+        val (m, c) = UserLocationOverlayHelper.updateUserLocationOverlay(
+            mapView = mapView,
+            userLocation = userLocation,
+            existingMarker = userMarker,
+            existingCircle = userCircle,
+            context = context
+        )
+        userMarker = m
+        userCircle = c
     }
 
     Box(modifier = modifier) {
@@ -341,24 +323,26 @@ fun OsmSegmentDetailMapView(
                 )
             }
 
-            // Tombol Fokus Lokasi GPS Surveyor
-            if (userLocation != null && userLocation.isAvailable) {
-                SmallFloatingActionButton(
-                    onClick = {
+            // Tombol Fokus Lokasi GPS Surveyor (Selalu Tampil)
+            SmallFloatingActionButton(
+                onClick = {
+                    if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
                         mapView.controller.animateTo(GeoPoint(userLocation.latitude, userLocation.longitude))
                         mapView.controller.setZoom(17.0)
-                    },
-                    containerColor = Color.White,
-                    contentColor = Color(0xFF0288D1),
-                    shape = CircleShape,
-                    modifier = Modifier.size(38.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MyLocation,
-                        contentDescription = "Lokasi Saya",
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                    } else {
+                        android.widget.Toast.makeText(context, "Mencari sinyal GPS surveyor...", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                },
+                containerColor = Color.White,
+                contentColor = Color(0xFF0288D1),
+                shape = CircleShape,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MyLocation,
+                    contentDescription = "Lokasi Saya",
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
             // Tombol Zoom In

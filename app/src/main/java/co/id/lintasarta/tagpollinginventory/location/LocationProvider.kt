@@ -88,12 +88,25 @@ class LocationProvider(private val context: Context) {
 
         registerGnssStatusCallback()
 
+        // 1. Segera ambil Last Known Location dari semua provider yang tersedia agar peta langsung menampilkan posisi
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (locationManager != null) {
+            val lastGps = try { locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER) } catch (_: Exception) { null }
+            val lastNet = try { locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) } catch (_: Exception) { null }
+            val lastPassive = try { locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER) } catch (_: Exception) { null }
+            val candidates = listOfNotNull(lastGps, lastNet, lastPassive).sortedByDescending { it.time }
+            candidates.firstOrNull()?.let {
+                processNewLocationSample(it, "Last Known (${it.provider})")
+            }
+        }
+
+        // 2. Fused Location Provider (Google Play Services)
         try {
             val locationRequest = LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
                 1000L
             ).setMinUpdateIntervalMillis(1000L)
-                .setWaitForAccurateLocation(true)
+                .setWaitForAccurateLocation(false) // Segera kirim lokasi terbaik tanpa menunggu GNSS lock lama
                 .build()
 
             locationCallback = object : LocationCallback() {
@@ -109,18 +122,17 @@ class LocationProvider(private val context: Context) {
                 context.mainLooper
             )
 
-            // Also request last known location immediately
             fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
                 if (loc != null) {
                     processNewLocationSample(loc, "Fused Location")
-                } else {
-                    tryFallbackNativeLocationManager()
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            tryFallbackNativeLocationManager()
         }
+
+        // 3. Native Location Manager sebagai listener paralel (berguna di dalam ruangan / saat Fused lambat)
+        tryFallbackNativeLocationManager()
     }
 
     @SuppressLint("MissingPermission")
@@ -229,8 +241,9 @@ class LocationProvider(private val context: Context) {
 
     private fun processNewLocationSample(location: Location, provider: String) {
         synchronized(locationSamples) {
-            // Filter out obviously bad fixes
-            if (location.hasAccuracy() && location.accuracy > 50f) {
+            // Filter out impossible or extremely erratic fixes (> 300m)
+            // Memastikan lokasi indoor / Wi-Fi / BTS tetap tampil di peta awal
+            if (location.hasAccuracy() && location.accuracy > 300f) {
                 return
             }
 

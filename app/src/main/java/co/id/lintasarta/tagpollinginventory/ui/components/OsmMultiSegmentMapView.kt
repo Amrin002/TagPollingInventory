@@ -101,6 +101,7 @@ fun OsmMultiSegmentMapView(
     // Reference map untuk polylines & markers per segment
     val overlayHolders = remember { mutableMapOf<String, SegmentOverlays>() }
     var userMarker by remember { mutableStateOf<Marker?>(null) }
+    var userCircle by remember { mutableStateOf<org.osmdroid.views.overlay.Polygon?>(null) }
     var lastZoomedCity by remember { mutableStateOf<String?>(null) }
 
     // 1. Bangun overlay segmen saat daftar segments atau filter selectedCity berubah
@@ -193,7 +194,11 @@ fun OsmMultiSegmentMapView(
             lastZoomedCity = currentFilterKey
         }
 
-        // Pastikan marker user tetap di lapisan paling atas
+        // Pastikan overlay user tetap di lapisan paling atas
+        userCircle?.let {
+            mapView.overlays.remove(it)
+            mapView.overlays.add(it)
+        }
         userMarker?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
@@ -222,7 +227,11 @@ fun OsmMultiSegmentMapView(
             }
         }
 
-        // Marker user selalu paling atas
+        // Overlay user selalu paling atas
+        userCircle?.let {
+            mapView.overlays.remove(it)
+            mapView.overlays.add(it)
+        }
         userMarker?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
@@ -231,35 +240,17 @@ fun OsmMultiSegmentMapView(
         mapView.postInvalidate()
     }
 
-    // 3. Perbarui posisi GPS pengguna secara mandiri tanpa menyentuh segmen atau kamera
+    // 3. Perbarui posisi GPS pengguna secara mandiri menggunakan UserLocationOverlayHelper
     LaunchedEffect(userLocation) {
-        if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
-            val userGeoPoint = GeoPoint(userLocation.latitude, userLocation.longitude)
-            if (userMarker == null) {
-                val marker = Marker(mapView).apply {
-                    title = "Lokasi Saya"
-                    snippet = "Akurasi ±${userLocation.accuracy}m"
-                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    icon = GradientDrawable().apply {
-                        shape = GradientDrawable.OVAL
-                        setColor(AndroidColor.parseColor("#0288D1")) // Blue dot
-                        setStroke(4, AndroidColor.WHITE)
-                        setSize(36, 36)
-                    }
-                }
-                userMarker = marker
-                mapView.overlays.add(marker)
-            }
-            userMarker?.position = userGeoPoint
-            userMarker?.snippet = "Akurasi ±${userLocation.accuracy}m"
-            mapView.postInvalidate()
-        } else {
-            userMarker?.let {
-                mapView.overlays.remove(it)
-                userMarker = null
-                mapView.postInvalidate()
-            }
-        }
+        val (m, c) = UserLocationOverlayHelper.updateUserLocationOverlay(
+            mapView = mapView,
+            userLocation = userLocation,
+            existingMarker = userMarker,
+            existingCircle = userCircle,
+            context = context
+        )
+        userMarker = m
+        userCircle = c
     }
 
     Box(modifier = modifier) {

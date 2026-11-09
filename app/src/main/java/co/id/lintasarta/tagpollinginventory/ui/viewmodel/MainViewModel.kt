@@ -214,6 +214,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val gpsIsStable: StateFlow<Boolean> = _gpsIsStable.asStateFlow()
 
     init {
+        // Otomatis mulai pembaruan lokasi jika izin GPS telah diberikan
+        if (locationProvider.hasLocationPermission()) {
+            startLocationUpdates()
+        }
+
         // Preload bundled MPO segments offline
         viewModelScope.launch {
             val bundled = RnimsApiClient.loadBundledMpoSegments(application)

@@ -63,6 +63,10 @@ fun SegmentDetailScreen(
     val currentLocation by viewModel.currentLocation.collectAsState()
     val mpoList by viewModel.mpoSegments.collectAsState()
 
+    LaunchedEffect(Unit) {
+        viewModel.startLocationUpdates()
+    }
+
     // Cari segmen aktif berdasarkan ID atau nama segmen
     val activeSegment = remember(project, segmentId, mpoList) {
         val found = project.segments.find { 

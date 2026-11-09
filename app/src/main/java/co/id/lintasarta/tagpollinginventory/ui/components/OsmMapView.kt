@@ -6,10 +6,13 @@ import android.graphics.drawable.GradientDrawable
 import android.location.Location
 import android.preference.PreferenceManager
 import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -191,25 +194,14 @@ fun OsmMapView(
             }
         }
 
-        // 3. User Real Location Marker
-        if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
-            val userPoint = GeoPoint(userLocation.latitude, userLocation.longitude)
-            val userMarker = Marker(mapView).apply {
-                position = userPoint
-                title = "Lokasi Surveyor (${userLocation.providerName})"
-                snippet = "Akurasi ±${String.format("%.1f", userLocation.accuracy)}m"
-                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-
-                val userShape = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(AndroidColor.parseColor("#00ACC1")) // Cyan
-                    setStroke(6, AndroidColor.WHITE)
-                    setSize(44, 44)
-                }
-                icon = userShape
-            }
-            mapView.overlays.add(userMarker)
-        }
+        // 3. User Real Location Marker & Accuracy Halo
+        UserLocationOverlayHelper.updateUserLocationOverlay(
+            mapView = mapView,
+            userLocation = userLocation,
+            existingMarker = null,
+            existingCircle = null,
+            context = context
+        )
 
         // 4. MAP CENTERING: Always center directly on the segment centroid / bounding box
         val validRoutePoints = allGeoPoints.filter { it.latitude != 0.0 && it.longitude != 0.0 }
@@ -265,36 +257,55 @@ fun OsmMapView(
             modifier = Modifier.fillMaxSize()
         )
 
-        FloatingActionButton(
-            onClick = {
-                val validRoutePoints = when {
-                    importedRoute != null && importedRoute.coordinates.isNotEmpty() ->
-                        importedRoute.coordinates.map { GeoPoint(it.latitude, it.longitude) }
-                    segmentCoordinates.isNotEmpty() ->
-                        segmentCoordinates.map { GeoPoint(it.latitude, it.longitude) }
-                    poles.isNotEmpty() ->
-                        poles.map { GeoPoint(it.latitude, it.longitude) }
-                    else -> emptyList()
-                }.filter { it.latitude != 0.0 && it.longitude != 0.0 }
-
-                if (validRoutePoints.isNotEmpty()) {
-                    val centerLat = validRoutePoints.map { it.latitude }.average()
-                    val centerLng = validRoutePoints.map { it.longitude }.average()
-                    mapView.controller.animateTo(GeoPoint(centerLat, centerLng), 16.5, 600L)
-                    Toast.makeText(context, "Peta dipusatkan ke rute segmen", Toast.LENGTH_SHORT).show()
-                } else if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
-                    mapView.controller.animateTo(GeoPoint(userLocation.latitude, userLocation.longitude), 16.5, 600L)
-                } else {
-                    mapView.controller.animateTo(GeoPoint(-4.76609, 136.76967), 15.5, 600L)
-                }
-            },
+        Column(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(bottom = 220.dp, end = 16.dp),
-            containerColor = TelecomPrimary,
-            contentColor = Color.White
+            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)
         ) {
-            Icon(Icons.Default.MyLocation, contentDescription = "Pusatkan Peta")
+            // 1. Tombol Fokus ke Lokasi Surveyor
+            FloatingActionButton(
+                onClick = {
+                    if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
+                        mapView.controller.animateTo(GeoPoint(userLocation.latitude, userLocation.longitude), 17.0, 500L)
+                        Toast.makeText(context, "Peta dipusatkan ke lokasi Anda", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Mencari sinyal GPS surveyor...", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                containerColor = Color.White,
+                contentColor = Color(0xFF1A73E8)
+            ) {
+                Icon(Icons.Default.MyLocation, contentDescription = "Lokasi Saya")
+            }
+
+            // 2. Tombol Fokus ke Rute Segmen FO
+            FloatingActionButton(
+                onClick = {
+                    val validRoutePoints = when {
+                        importedRoute != null && importedRoute.coordinates.isNotEmpty() ->
+                            importedRoute.coordinates.map { GeoPoint(it.latitude, it.longitude) }
+                        segmentCoordinates.isNotEmpty() ->
+                            segmentCoordinates.map { GeoPoint(it.latitude, it.longitude) }
+                        poles.isNotEmpty() ->
+                            poles.map { GeoPoint(it.latitude, it.longitude) }
+                        else -> emptyList()
+                    }.filter { it.latitude != 0.0 && it.longitude != 0.0 }
+
+                    if (validRoutePoints.isNotEmpty()) {
+                        val centerLat = validRoutePoints.map { it.latitude }.average()
+                        val centerLng = validRoutePoints.map { it.longitude }.average()
+                        mapView.controller.animateTo(GeoPoint(centerLat, centerLng), 16.5, 600L)
+                        Toast.makeText(context, "Peta dipusatkan ke rute segmen", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Belum ada titik rute segmen", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                containerColor = TelecomPrimary,
+                contentColor = Color.White
+            ) {
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Pusatkan Rute Segmen")
+            }
         }
     }
 }

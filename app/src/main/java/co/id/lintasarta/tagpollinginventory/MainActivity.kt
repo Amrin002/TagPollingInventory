@@ -23,7 +23,18 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        // Handle permission results if needed
+        val fine = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarse = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (fine || coarse) {
+            mainViewModel?.startLocationUpdates()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (mainViewModel?.locationProvider?.hasLocationPermission() == true) {
+            mainViewModel?.startLocationUpdates()
+        }
     }
 
     override fun onNewIntent(intent: android.content.Intent?) {
