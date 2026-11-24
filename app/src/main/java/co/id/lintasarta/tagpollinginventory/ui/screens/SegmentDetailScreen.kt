@@ -311,47 +311,25 @@ fun SegmentDetailScreen(
                 color = Color.White,
                 shadowElevation = 3.dp
             ) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     val targetPole = segmentPoles.find { it.id == targetPoleId }
                         ?: segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text = if (targetPole != null) {
-                                    if (targetPole.status == TagStatus.COMPLETED) {
-                                        "Target: PL ${targetPole.sequence} (${targetPole.effectiveAssetUid}) • Selesai"
-                                    } else {
-                                        "Target: PL ${targetPole.sequence} (${targetPole.effectiveAssetUid})"
-                                    }
-                                } else {
-                                    "Pilih Mode Survei untuk Segment Ini:"
-                                },
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (targetPole?.status == TagStatus.COMPLETED) Color(0xFF2E7D32) else TelecomPrimary
-                            )
-                            Text(
-                                text = if (targetPole != null) {
-                                    if (targetPole.status == TagStatus.COMPLETED) {
-                                        "Tiang ini telah disurvei. Tap tombol di bawah untuk survei tiang berikutnya:"
-                                    } else {
-                                        "Lanjutkan survei tiang target dengan salah satu mode di bawah:"
-                                    }
-                                } else {
-                                    "Mulai pengambilan data tiang baru:"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray,
-                                fontSize = 11.sp
-                            )
-                        }
-                    }
+                    Text(
+                        text = if (targetPole != null) {
+                            if (targetPole.status == TagStatus.COMPLETED) {
+                                "Target: PL ${targetPole.sequence} • Selesai"
+                            } else {
+                                "Target: PL ${targetPole.sequence} (${targetPole.effectiveAssetUid})"
+                            }
+                        } else {
+                            "Mulai Survei Tiang"
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (targetPole?.status == TagStatus.COMPLETED) Color(0xFF2E7D32) else TelecomPrimary
+                    )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
