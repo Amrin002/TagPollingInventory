@@ -205,13 +205,21 @@ fun QuickTaggingSessionScreen(
         }
     }
 
-    // Deteksi Tiang Eksisting Otomatis (Radius < 20 meter)
+    // Deteksi Tiang Eksisting Otomatis (Radius < 20 meter, khusus segmen aktif)
     LaunchedEffect(correctedLat, correctedLng) {
         val lat = correctedLat
         val lng = correctedLng
         if (lat != null && lng != null && !isUsingExistingPole) {
+            val currentSegId = activeSegment?.id
+            val cleanSegId = currentSegId?.removePrefix("SEG-")
             val nearby = allPoles.values
-                .filter { it.id != draftPole?.id && it.latitude != 0.0 && it.longitude != 0.0 }
+                .filter { pole ->
+                    pole.id != draftPole?.id &&
+                    !pole.id.startsWith("089") &&
+                    pole.latitude != 0.0 &&
+                    pole.longitude != 0.0 &&
+                    (currentSegId == null || pole.segmentId == currentSegId || pole.segmentId.removePrefix("SEG-") == cleanSegId)
+                }
                 .map { it to calculateRealDistanceMeters(lat, lng, it.latitude, it.longitude) }
                 .filter { it.second <= 20.0f }
                 .minByOrNull { it.second }

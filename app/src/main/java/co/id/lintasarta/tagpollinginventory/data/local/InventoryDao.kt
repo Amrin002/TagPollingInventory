@@ -115,6 +115,9 @@ interface InventoryDao {
     @Query("DELETE FROM poles WHERE id = :id")
     suspend fun deletePoleById(id: String)
 
+    @Query("DELETE FROM poles WHERE id LIKE '089%' OR segmentId = 'SEG-089' OR (latitude < -7.0 AND longitude BETWEEN 127.0 AND 129.0)")
+    suspend fun deleteTiakurPoles()
+
     @Query("DELETE FROM poles")
     suspend fun clearPoles()
 

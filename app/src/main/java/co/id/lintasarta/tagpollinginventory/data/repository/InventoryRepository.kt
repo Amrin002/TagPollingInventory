@@ -92,13 +92,28 @@ class InventoryRepository(private val context: Context) {
             }.collect { }
         }
 
+        // Pembersihan otomatis seluruh data dummy/ujicoba Tiakur (PO 089) dari SQLite Room
+        scope.launch {
+            dao.deleteTiakurPoles()
+        }
+
         // Observasi seluruh tiang dari SQLite Room
         scope.launch {
             dao.getAllPolesFlow().collect { poleList ->
-                val healedPoles = poleList.map { it.withCalculatedStatus() }
+                // Filter ketat: buang seluruh data tiang ujicoba Tiakur / PO 089
+                val cleanPoles = poleList.filter { 
+                    !it.id.startsWith("089") && 
+                    it.segmentId != "SEG-089" && 
+                    !(it.latitude < -7.0 && it.longitude in 127.0..129.0)
+                }
+                if (cleanPoles.size != poleList.size) {
+                    scope.launch { dao.deleteTiakurPoles() }
+                }
+
+                val healedPoles = cleanPoles.map { it.withCalculatedStatus() }
                 // Self-healing: jika tiang sudah ada foto & koordinat tapi status belum COMPLETED, update SQLite
                 healedPoles.forEach { healed ->
-                    val original = poleList.find { it.id == healed.id }
+                    val original = cleanPoles.find { it.id == healed.id }
                     if (original != null && original.status != healed.status) {
                         scope.launch { dao.insertPole(healed) }
                     }
@@ -995,6 +1010,12 @@ class InventoryRepository(private val context: Context) {
     ): Int = withContext(Dispatchers.IO) {
         val ift = mapData.ift
         val targetPoId = ift?.poId?.takeIf { it.isNotBlank() }
+
+        // Data Tiakur (PO 089) adalah data uji coba lama dan dilarang masuk ke aplikasi
+        if (targetPoId == "089" || ift?.poName?.contains("Tiakur", ignoreCase = true) == true) {
+            return@withContext 0
+        }
+
         val allSegments = dao.getAllSegmentsSync()
 
         // Cari segmen yang cocok berdasarkan ID atau PO ID atau Nama
@@ -1160,6 +1181,11 @@ class InventoryRepository(private val context: Context) {
             val effectivePoId = poId 
                 ?: seg?.poId?.takeIf { it.isNotBlank() } 
                 ?: segmentId.removePrefix("SEG-")
+
+            // Segmen Tiakur atau data PO 089 diblokir total
+            if (effectivePoId == "089" || effectivePoId.contains("089") || seg?.name?.contains("Tiakur", ignoreCase = true) == true) {
+                return@withContext Result.success(0)
+            }
 
             val mapResult = RnimsApiClient.fetchSegmentAssetMap(baseUrl, effectivePoId)
             if (mapResult.isSuccess) {
