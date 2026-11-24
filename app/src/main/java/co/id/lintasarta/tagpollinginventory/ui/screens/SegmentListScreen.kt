@@ -249,7 +249,7 @@ fun SegmentListScreen(
         )
     }
 
-    // Modal Choice Bottom Sheet: Quick Tagging vs Tag Polling PM vs Detail
+    // Modal Choice Bottom Sheet: Quick Tagging vs Detail Segmen
     activeSegmentForAction?.let { segment ->
         ModalBottomSheet(
             onDismissRequest = { activeSegmentForAction = null },
@@ -356,60 +356,7 @@ fun SegmentListScreen(
                     }
                 }
 
-                // Option 2: Tag Polling PM (Preventive Maintenance)
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val segId = segment.id
-                            activeSegmentForAction = null
-                            viewModel.startPmSurveyForSegment(segId)
-                        },
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF90CAF9))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = TelecomPrimary,
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.CheckCircle,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Tag Polling PM (Lengkap)",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = TelecomPrimary
-                            )
-                            Text(
-                                text = "Peta deviasi rute FO, GNSS telemetri 10 sampel, 10 foto SOP, atribut fisik tiang, kabel & aksesoris.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF0D47A1)
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = null,
-                            tint = TelecomPrimary
-                        )
-                    }
-                }
-
-                // Option 3: Buka Detail Segmen & Tiang
+                // Option 2: Buka Detail Segmen & Tiang
                 OutlinedCard(
                     modifier = Modifier
                         .fillMaxWidth()

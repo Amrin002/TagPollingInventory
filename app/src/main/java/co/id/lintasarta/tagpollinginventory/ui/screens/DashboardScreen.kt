@@ -25,17 +25,15 @@ import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
 @Composable
 fun DashboardScreen(
     viewModel: MainViewModel,
-    onContinueFieldWork: () -> Unit,
+    onContinueFieldWork: () -> Unit = {},
     onViewProject: () -> Unit,
-    onCreateSegmentClick: () -> Unit,
+    onCreateSegmentClick: () -> Unit = {},
     onQuickTaggingClick: () -> Unit = { viewModel.startQuickTaggingFlow() }
 ) {
     val project by viewModel.project.collectAsState()
     val activeRoute by viewModel.activeRoute.collectAsState()
     val polesMap by viewModel.poles.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
-
-    val hasWorkData = activeRoute != null || polesMap.isNotEmpty()
 
     Column(
         modifier = Modifier
@@ -190,7 +188,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Quick Tagging Button (Entry Point Terpisah)
+        // Tombol Utama: Mulai Quick Tagging
         Button(
             onClick = onQuickTaggingClick,
             modifier = Modifier
@@ -207,41 +205,14 @@ fun DashboardScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Quick Tagging (Tagging Cepat)",
+                text = "Mulai Quick Tagging",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
             )
         }
 
-        // Main Action Buttons (Branching: New Field Work -> Create Segment vs Continue Field Work)
-        Button(
-            onClick = {
-                if (hasWorkData) {
-                    onContinueFieldWork()
-                } else {
-                    onCreateSegmentClick()
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Icon(
-                imageVector = if (hasWorkData) Icons.Default.PlayArrow else Icons.Default.Add,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = if (hasWorkData) "Tag Polling PM (Survei Lengkap)" else "Pekerjaan Lapangan Baru (PM)",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
+        // Tombol Sekunder: Lihat Segmen / Proyek
         OutlinedButton(
             onClick = onViewProject,
             modifier = Modifier
@@ -257,7 +228,7 @@ fun DashboardScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Lihat Proyek",
+                text = "Lihat Daftar Segmen",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold
             )

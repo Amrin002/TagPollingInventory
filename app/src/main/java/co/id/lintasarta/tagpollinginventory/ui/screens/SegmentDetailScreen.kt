@@ -51,7 +51,7 @@ import java.util.Locale
  * 1. Minimap interaktif OpenStreetMap di bagian atas menampilkan rute polyline FO segmen terpilih.
  * 2. Seluruh tiang pada segmen ini ditampilkan di minimap dengan label badge "PL 1", "PL 2", dst.
  *    beserta pewarnaan status (Hijau = Selesai, Merah = Konflik, Biru = Belum Tagging).
- * 3. Box Mode Survei di bawah minimap (Quick Tagging < 1 Menit & Tag Polling PM).
+ * 3. Box Aksi Survei di bawah minimap (Mulai Quick Tagging).
  * 4. Daftar tiang (Pole Inventory List) di bawahnya mengikuti urutan sequence tiang.
  * 5. Mengetuk kartu tiang akan menyorot tiang tersebut di minimap di atas.
  */
@@ -59,7 +59,7 @@ import java.util.Locale
 fun SegmentDetailScreen(
     viewModel: MainViewModel,
     onBackClick: () -> Unit,
-    onStartTagging: (String) -> Unit
+    onStartTagging: (String) -> Unit = {}
 ) {
     val project by viewModel.project.collectAsState()
     val segmentId by viewModel.selectedSegmentId.collectAsState()
@@ -331,75 +331,37 @@ fun SegmentDetailScreen(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    // Tombol Tunggal: Quick Tagging
+                    Button(
+                        onClick = {
+                            val poleToTag = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) {
+                                targetPole
+                            } else {
+                                segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
+                            }
+                            if (poleToTag != null) {
+                                viewModel.startQuickTaggingForTargetPole(poleToTag.id)
+                            } else {
+                                viewModel.startQuickTaggingForSegment(activeSegment.id)
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        // Tombol 1: Quick Tagging (< 1 Menit)
-                        Button(
-                            onClick = {
-                                val poleToTag = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) {
-                                    targetPole
-                                } else {
-                                    segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
-                                }
-                                if (poleToTag != null) {
-                                    viewModel.startQuickTaggingForTargetPole(poleToTag.id)
-                                } else {
-                                    viewModel.startQuickTaggingForSegment(activeSegment.id)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Quick Tagging",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        // Tombol 2: Tag Polling PM (Survei Lengkap)
-                        Button(
-                            onClick = {
-                                val poleToTag = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) {
-                                    targetPole
-                                } else {
-                                    segmentPoles.firstOrNull { it.status == TagStatus.NOT_TAGGED }
-                                }
-                                if (poleToTag != null) {
-                                    onStartTagging(poleToTag.id)
-                                } else {
-                                    viewModel.startPmSurveyForSegment(activeSegment.id)
-                                }
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(46.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (targetPole != null && targetPole.status == TagStatus.NOT_TAGGED) Icons.Default.PlayArrow else Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Tag Polling PM",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Bolt,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Mulai Quick Tagging",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }
