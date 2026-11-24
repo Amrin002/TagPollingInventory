@@ -20,7 +20,7 @@ class ExportEngine(private val context: Context) {
     fun generateAlpacaMasterCsv(poles: List<Pole>, targetFile: File? = null): File {
         val file = targetFile ?: File(exportDir, "Alpaca_Master_Poles.csv")
         val sb = StringBuilder()
-        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,missing_reason,is_existing_pole,sync_status,timestamp,photo_sha256\n")
+        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,missing_reason,is_existing_pole,sync_status,timestamp,photo_sha256,equipment\n")
 
         for (pole in poles) {
             val photoFileName = if (!pole.photoPath.isNullOrEmpty()) {
@@ -51,7 +51,9 @@ class ExportEngine(private val context: Context) {
             sb.append("${pole.isExistingPole},")
             sb.append("\"${pole.syncStatus}\",")
             sb.append("\"${pole.capturedTimestamp}\",")
-            sb.append("\"${pole.photoSha256 ?: ""}\"\n")
+            val eqStr = pole.equipment.filter { it.isNotBlank() }.joinToString("; ").replace("\"", "'")
+            sb.append("\"${pole.photoSha256 ?: ""}\",")
+            sb.append("\"$eqStr\"\n")
         }
 
         file.writeText(sb.toString())
@@ -203,6 +205,10 @@ class ExportEngine(private val context: Context) {
             }
             sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Kepemilikan</b></td><td>${pole.ownership.displayName}</td></tr>\n")
             sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Kondisi</b></td><td>${pole.condition.displayName}</td></tr>\n")
+            val eqList = pole.equipment.filter { it.isNotBlank() }
+            if (eqList.isNotEmpty()) {
+                sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Aksesoris</b></td><td>${escapeXml(eqList.joinToString(", "))}</td></tr>\n")
+            }
             if (pole.status == TagStatus.MISSING || pole.matchStatus == "MISSING") {
                 sb.append("            <tr><td style=\"background:#ECEFF1; color:#37474F;\"><b>Status Lapangan</b></td><td style=\"color:#C62828;\"><b>NIHIL / TIDAK DITEMUKAN</b> (${escapeXml(pole.missingReason ?: "Nihil")})</td></tr>\n")
             }
@@ -235,6 +241,9 @@ class ExportEngine(private val context: Context) {
             sb.append("        <Data name=\"missing_reason\"><value>${escapeXml(pole.missingReason ?: "")}</value></Data>\n")
             sb.append("        <Data name=\"is_existing_pole\"><value>${pole.isExistingPole}</value></Data>\n")
             sb.append("        <Data name=\"sync_status\"><value>${escapeXml(pole.syncStatus)}</value></Data>\n")
+            if (pole.equipment.isNotEmpty()) {
+                sb.append("        <Data name=\"equipment\"><value>${escapeXml(pole.equipment.joinToString(", "))}</value></Data>\n")
+            }
             sb.append("      </ExtendedData>\n")
 
             sb.append("      <Point>\n")

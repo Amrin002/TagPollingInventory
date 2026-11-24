@@ -823,7 +823,8 @@ class InventoryRepository(private val context: Context) {
         photoSha256: String? = null,
         matchStatus: String = "MATCHED",
         notes: String? = null,
-        accuracy: Float = 2.5f
+        accuracy: Float = 2.5f,
+        equipment: Set<String>? = null
     ): PoleEntity? {
         val draft = _currentDraftPole.value?.takeIf { it.id == poleId } ?: _poles.value[poleId] ?: return null
         val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
@@ -856,6 +857,7 @@ class InventoryRepository(private val context: Context) {
             isSafetyDeferred = isSafetyDeferred,
             safetyDeferralReason = safetyDeferralReason,
             matchStatus = matchStatus,
+            equipment = equipment ?: draft.equipment,
             notes = notes ?: draft.notes,
             isLocationLocked = true,
             photoPaths = if (!photoPath.isNullOrEmpty()) listOf(photoPath) else emptyList(),

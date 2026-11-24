@@ -120,6 +120,7 @@ fun QuickTaggingSessionScreen(
 
     // Screen State for the current pole
     var selectedAssetClass by remember { mutableStateOf(draftPole?.assetClass ?: "pole_9") }
+    var selectedEquipment by remember { mutableStateOf<Set<String>>(draftPole?.equipment ?: emptySet()) }
     var gpsState by remember { mutableStateOf(QuickGpsState.NOT_CAPTURED) }
     var capturedOriginalLat by remember { mutableStateOf<Double?>(null) }
     var capturedOriginalLng by remember { mutableStateOf<Double?>(null) }
@@ -166,6 +167,7 @@ fun QuickTaggingSessionScreen(
         val pole = draftPole
         if (pole != null) {
             selectedAssetClass = pole.assetClass.ifEmpty { "pole_9" }
+            selectedEquipment = pole.equipment
             if (pole.isExistingPole || pole.effectiveAssetUid.startsWith("POL-")) {
                 isUsingExistingPole = true
             }
@@ -455,6 +457,168 @@ fun QuickTaggingSessionScreen(
                             }
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+                    HorizontalDivider(color = Color(0xFFEEEEEE))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // AKSESORIS TIANG (BAHASA LINTASARTA)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Aksesoris Tiang (Bahasa Lintasarta):",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.DarkGray
+                        )
+                        if (selectedEquipment.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFE8F5E9)
+                            ) {
+                                Text(
+                                    text = "${selectedEquipment.size} Dipilih",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2E7D32),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val accessoriesRow1 = listOf("JB", "Slack Support", "Slakkan")
+                    val accessoriesRow2 = listOf("Death End / Spiral", "Splitter", "OTB Outdoor")
+
+                    // Baris 1: JB, Slack Support, Slakkan
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        accessoriesRow1.forEach { item ->
+                            val isSelected = selectedEquipment.contains(item)
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clickable {
+                                        selectedEquipment = if (isSelected) {
+                                            selectedEquipment - item
+                                        } else {
+                                            selectedEquipment + item
+                                        }
+                                        draftPole?.let { curr ->
+                                            viewModel.repository.updateDraftAttributes(
+                                                type = curr.type,
+                                                condition = curr.condition,
+                                                ownership = curr.ownership,
+                                                height = curr.height,
+                                                tagNumber = curr.tagNumber,
+                                                hasFoCable = curr.hasFoCable,
+                                                cableCondition = curr.cableCondition,
+                                                equipment = selectedEquipment,
+                                                notes = curr.notes
+                                            )
+                                        }
+                                    },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) Color(0xFFE8F5E9) else Color(0xFFF5F5F5),
+                                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF2E7D32)) else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color(0xFF2E7D32) else Color.Gray,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = item,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color(0xFF1B5E20) else Color(0xFF424242),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Baris 2: Death End / Spiral, Splitter, OTB Outdoor
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        accessoriesRow2.forEach { item ->
+                            val isSelected = selectedEquipment.contains(item)
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clickable {
+                                        selectedEquipment = if (isSelected) {
+                                            selectedEquipment - item
+                                        } else {
+                                            selectedEquipment + item
+                                        }
+                                        draftPole?.let { curr ->
+                                            viewModel.repository.updateDraftAttributes(
+                                                type = curr.type,
+                                                condition = curr.condition,
+                                                ownership = curr.ownership,
+                                                height = curr.height,
+                                                tagNumber = curr.tagNumber,
+                                                hasFoCable = curr.hasFoCable,
+                                                cableCondition = curr.cableCondition,
+                                                equipment = selectedEquipment,
+                                                notes = curr.notes
+                                            )
+                                        }
+                                    },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isSelected) Color(0xFFE8F5E9) else Color(0xFFF5F5F5),
+                                border = if (isSelected) androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF2E7D32)) else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 4.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelected) Icons.Default.Check else Icons.Default.Add,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color(0xFF2E7D32) else Color.Gray,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = item,
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) Color(0xFF1B5E20) else Color(0xFF424242),
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -507,9 +671,11 @@ fun QuickTaggingSessionScreen(
                                             poleCode = existing.poleCode,
                                             sequence = existing.sequence,
                                             assetClass = existing.assetClass,
+                                            equipment = existing.equipment,
                                             isExistingPole = true
                                         )
                                         selectedAssetClass = existing.assetClass
+                                        selectedEquipment = existing.equipment
                                         viewModel.repository.startDraftForPole(updated.id)
                                     }
                                     Toast.makeText(context, "Memperbarui Aset Eksisting: ${existing.assetUid}", Toast.LENGTH_SHORT).show()
@@ -950,6 +1116,7 @@ fun QuickTaggingSessionScreen(
                         isExistingPole = isUsingExistingPole,
                         photoSha256 = capturedPhotoSha256,
                         accuracy = currentLocation.accuracy,
+                        equipment = selectedEquipment,
                         onSuccess = { savedCode ->
                             isSubmitting = false
                             lastSubmittedPoleCode = savedCode
@@ -965,6 +1132,7 @@ fun QuickTaggingSessionScreen(
                             capturedPhotoSha256 = null
                             isUsingExistingPole = false
                             detectedExistingPole = null
+                            selectedEquipment = emptySet()
 
                             coroutineScope.launch {
                                 scrollState.animateScrollTo(0)

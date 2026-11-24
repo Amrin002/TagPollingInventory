@@ -800,6 +800,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         photoSha256: String? = null,
         accuracy: Float = 2.5f,
         notes: String? = null,
+        equipment: Set<String>? = null,
         onSuccess: (String) -> Unit
     ) {
         val draft = currentDraftPole.value ?: return
@@ -815,7 +816,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             isExistingPole = isExistingPole,
             photoSha256 = photoSha256,
             accuracy = accuracy,
-            notes = notes
+            notes = notes,
+            equipment = equipment
         )
         val poleCode = saved?.assetUid?.ifEmpty { saved.poleCode.ifEmpty { saved.id } } ?: draft.assetUid.ifEmpty { draft.poleCode.ifEmpty { draft.id } }
         onSuccess(poleCode)
