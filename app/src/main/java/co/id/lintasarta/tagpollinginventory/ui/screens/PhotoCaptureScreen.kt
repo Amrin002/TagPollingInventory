@@ -78,10 +78,10 @@ fun PhotoCaptureScreen(
         onBackClick = onBackClick,
         onSaveAndReview = onSaveAndReview,
         onSetDraftPhotoForSlot = { slotIndex, path ->
-            viewModel.repository.setDraftPhotoForSlot(slotIndex, path)
+            viewModel.setDraftPhotoForSlot(slotIndex, path)
         },
         onRemoveDraftPhotoFromSlot = { slotIndex ->
-            viewModel.repository.removeDraftPhotoFromSlot(slotIndex)
+            viewModel.removeDraftPhotoFromSlot(slotIndex)
         },
         onUpdateNotes = { newNotes ->
             viewModel.repository.updateDraftAttributes(
@@ -194,17 +194,21 @@ fun PhotoCaptureScreenContent(
 ) {
     val context = LocalContext.current
     val rawPhotoPaths = draftPole?.photoPaths ?: emptyList()
+    val singlePhoto = draftPole?.photoPath
 
     // Fixed 10 slots
-    val slotPaths = remember(rawPhotoPaths) {
+    val slotPaths = remember(rawPhotoPaths, singlePhoto) {
         val result = MutableList(10) { "" }
         for (i in rawPhotoPaths.indices) {
             if (i < 10) result[i] = rawPhotoPaths[i]
         }
-        result
+        if (result[0].isEmpty() && !singlePhoto.isNullOrEmpty()) {
+            result[0] = singlePhoto
+        }
+        result.toList()
     }
 
-    val requiredFilledCount = listOf(slotPaths[0], slotPaths[1], slotPaths[2]).count { it.isNotEmpty() }
+    val requiredFilledCount = listOf(slotPaths[0], slotPaths[1], slotPaths[2]).count { it.isNotEmpty() && File(it).exists() }
     val isRequiredComplete = requiredFilledCount == 3
 
     var activeCameraSlotIndex by remember { mutableStateOf<Int?>(null) }
@@ -528,12 +532,20 @@ fun PhotoCaptureScreenContent(
                                         .background(Color.White)
                                         .border(4.dp, TelecomPrimary, CircleShape)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(54.dp)
-                                            .clip(CircleShape)
-                                            .background(TelecomPrimary)
-                                    )
+                                    if (isCapturing) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(36.dp),
+                                            color = TelecomPrimary,
+                                            strokeWidth = 3.dp
+                                        )
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(54.dp)
+                                                .clip(CircleShape)
+                                                .background(TelecomPrimary)
+                                        )
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.size(48.dp))

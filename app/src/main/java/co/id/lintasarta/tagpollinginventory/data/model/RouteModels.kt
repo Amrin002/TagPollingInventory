@@ -9,29 +9,107 @@ data class RouteCoordinate(
 )
 
 /**
+ * DTO Geometri Titik Tiang: Mendukung objek GeoJSON Point {"type": "Point", "coordinates": [lng, lat]}
+ * secara polimorfik dan defensif.
+ */
+data class AlpacaAssetGeometryDto(
+    @SerializedName("type")
+    val type: String? = "Point",
+    @SerializedName("coordinates")
+    val coordinates: List<Double>? = emptyList()
+) {
+    val longitude: Double get() = coordinates?.getOrNull(0) ?: 0.0
+    val latitude: Double get() = coordinates?.getOrNull(1) ?: 0.0
+}
+
+/**
  * Model Aset Tiang Eksisting dari API Dashboard Alpaca:
  * GET /api/otdr/asset-assurance/map?po_id={poId}
  */
-data class AlpacaPraAssetDto(
+data class AlpacaAssetItemDto(
     @SerializedName(value = "asset_uid", alternate = ["assetUid", "id", "pole_code"])
-    val asset_uid: String,
-    @SerializedName(value = "asset_class", alternate = ["assetClass", "pole_class", "type"])
-    val asset_class: String = "pole_9", // "pole_7" atau "pole_9"
+    val assetUid: String = "",
+    @SerializedName(value = "feature_name", alternate = ["featureName", "name"])
+    val featureName: String? = null,
     @SerializedName(value = "asset_type", alternate = ["assetType", "material"])
-    val asset_type: String? = "steel", // "concrete" atau "steel"
-    @SerializedName(value = "po_id", alternate = ["poId", "segment_id", "segmentId"])
-    val po_id: String? = "",
-    val geometry: List<Double> = emptyList(), // [lng, lat]
+    val assetType: String? = "pole",
+    @SerializedName(value = "asset_class", alternate = ["assetClass", "pole_class"])
+    val assetClass: String = "pole_9", // "pole_7" atau "pole_9"
+    @SerializedName(value = "source_proximity")
+    val sourceProximity: String? = null,
+    @SerializedName(value = "classification_confidence")
+    val classificationConfidence: String? = null,
     @SerializedName(value = "match_status", alternate = ["matchStatus", "status"])
-    val match_status: String = "MATCHED",
-    val anomaly_reason: String? = null
+    val matchStatus: String = "MATCHED",
+    @SerializedName(value = "matched_po_id", alternate = ["matchedPoId", "po_id", "poId"])
+    val matchedPoId: String? = null,
+    @SerializedName(value = "matched_po_distance_m", alternate = ["matchedPoDistanceM"])
+    val matchedPoDistanceM: String? = null,
+    @SerializedName(value = "geometry")
+    val geometry: AlpacaAssetGeometryDto? = null,
+    @SerializedName(value = "anomaly_reason")
+    val anomalyReason: String? = null
 ) {
-    val longitude: Double
-        get() = if (geometry.size >= 2) geometry[0] else 0.0
-
-    val latitude: Double
-        get() = if (geometry.size >= 2) geometry[1] else 0.0
+    // Properti Kompatibilitas untuk Kode Lama
+    val asset_uid: String get() = assetUid
+    val asset_class: String get() = assetClass
+    val asset_type: String? get() = assetType
+    val match_status: String get() = matchStatus
+    val po_id: String? get() = matchedPoId
+    val longitude: Double get() = geometry?.longitude ?: 0.0
+    val latitude: Double get() = geometry?.latitude ?: 0.0
 }
+
+typealias AlpacaPraAssetDto = AlpacaAssetItemDto
+
+/**
+ * Geometri Rute IFT: MultiLineString berisi list garis, masing-masing garis memiliki koordinat [lng, lat].
+ */
+data class AlpacaIftGeometryDto(
+    @SerializedName("type")
+    val type: String? = "MultiLineString",
+    @SerializedName("coordinates")
+    val coordinates: List<List<List<Double>>>? = emptyList()
+) {
+    fun toFlatRouteCoordinates(): List<RouteCoordinate> {
+        val result = mutableListOf<RouteCoordinate>()
+        coordinates?.forEach { line ->
+            line.forEach { pt ->
+                if (pt.size >= 2) {
+                    result.add(RouteCoordinate(longitude = pt[0], latitude = pt[1]))
+                }
+            }
+        }
+        return result
+    }
+}
+
+/**
+ * Metadata Rute Segmen IFT Alpaca PRA.
+ */
+data class AlpacaIftDto(
+    @SerializedName(value = "po_id", alternate = ["poId"])
+    val poId: String = "",
+    @SerializedName(value = "po_name", alternate = ["poName", "name"])
+    val poName: String = "",
+    @SerializedName(value = "area")
+    val area: String? = "MPO",
+    @SerializedName(value = "region")
+    val region: String? = "EIR",
+    @SerializedName(value = "length_po", alternate = ["lengthPo", "length_m"])
+    val lengthPo: Double = 0.0,
+    @SerializedName(value = "geometry")
+    val geometry: AlpacaIftGeometryDto? = null
+)
+
+/**
+ * Respon Lengkap Endpoint /api/otdr/asset-assurance/map?po_id={poId}
+ */
+data class AlpacaMapResponseDto(
+    val run: Map<String, Any?>? = null,
+    val ift: AlpacaIftDto? = null,
+    val assets: List<AlpacaAssetItemDto> = emptyList()
+)
 
 data class ImportedPole(
     val id: String,

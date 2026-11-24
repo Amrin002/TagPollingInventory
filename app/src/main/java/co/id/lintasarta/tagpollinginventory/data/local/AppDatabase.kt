@@ -11,7 +11,7 @@ import co.id.lintasarta.tagpollinginventory.data.model.SegmentEntity
 
 @Database(
     entities = [SegmentEntity::class, PoleEntity::class, ExportFile::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

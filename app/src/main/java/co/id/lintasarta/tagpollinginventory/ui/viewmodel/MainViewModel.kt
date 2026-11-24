@@ -17,7 +17,9 @@ import co.id.lintasarta.tagpollinginventory.location.LocationProvider
 import co.id.lintasarta.tagpollinginventory.data.auth.UserSession
 import co.id.lintasarta.tagpollinginventory.data.auth.UserSessionManager
 import co.id.lintasarta.tagpollinginventory.data.preferences.CameraSettingsManager
+import co.id.lintasarta.tagpollinginventory.network.AreaDto
 import co.id.lintasarta.tagpollinginventory.network.ConnectionTestResult
+import co.id.lintasarta.tagpollinginventory.network.GDriveUploadResponse
 import co.id.lintasarta.tagpollinginventory.network.NetworkObserver
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
@@ -95,10 +97,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentTab = MutableStateFlow(AppTab.DASHBOARD)
     val currentTab: StateFlow<AppTab> = _currentTab.asStateFlow()
 
-    private val _currentScreen = MutableStateFlow(
-        if (userSessionManager.hasActiveSession()) ScreenFlow.TAB_ROOT else ScreenFlow.LOGIN
-    )
+    // Mode Mandiri Offline: Langsung buka TAB_ROOT tanpa layar login
+    private val _currentScreen = MutableStateFlow(ScreenFlow.TAB_ROOT)
     val currentScreen: StateFlow<ScreenFlow> = _currentScreen.asStateFlow()
+
+    val availableAreas: List<AreaDto> = repository.areas.filter { it.areaId >= 2 }
 
     private val _isQuickTaggingMode = MutableStateFlow(false)
     val isQuickTaggingMode: StateFlow<Boolean> = _isQuickTaggingMode.asStateFlow()
@@ -198,6 +201,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _lastGeneratedExport = MutableStateFlow<ExportFile?>(null)
     val lastGeneratedExport: StateFlow<ExportFile?> = _lastGeneratedExport.asStateFlow()
 
+    // Google Drive Webhook Sync State
+    private val _gdriveWebhookUrl = MutableStateFlow(userSessionManager.getGDriveWebhookUrl())
+    val gdriveWebhookUrl: StateFlow<String> = _gdriveWebhookUrl.asStateFlow()
+
+    fun setGDriveWebhookUrl(url: String) {
+        val clean = url.trim()
+        userSessionManager.setGDriveWebhookUrl(clean)
+        _gdriveWebhookUrl.value = clean
+    }
+
+    private val _isUploadingGDrive = MutableStateFlow(false)
+    val isUploadingGDrive: StateFlow<Boolean> = _isUploadingGDrive.asStateFlow()
+
+    private val _gdriveUploadMessage = MutableStateFlow<String?>(null)
+    val gdriveUploadMessage: StateFlow<String?> = _gdriveUploadMessage.asStateFlow()
+
+    fun testGDriveWebhook(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val startTime = System.currentTimeMillis()
+            val res = withContext(Dispatchers.IO) {
+                try {
+                    val url = java.net.URL(_gdriveWebhookUrl.value)
+                    val conn = (url.openConnection() as java.net.HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 15000
+                        readTimeout = 15000
+                        setRequestProperty("User-Agent", "TagPolling-Android")
+                    }
+                    val code = conn.responseCode
+                    if (code in 200..399) {
+                        val latency = System.currentTimeMillis() - startTime
+                        Result.success("Webhook Online (${latency}ms)")
+                    } else {
+                        Result.failure(Exception("HTTP $code"))
+                    }
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            }
+            res.onSuccess { onResult(true, it) }.onFailure { onResult(false, it.message ?: "Koneksi gagal") }
+        }
+    }
+
     // Map Downloader State
     val isMapDownloading = mapDownloader.isDownloading
     val mapDownloadProgress = mapDownloader.progressPercent
@@ -219,11 +265,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             startLocationUpdates()
         }
 
-        // Preload bundled MPO segments offline
+        // Sinkronisasi area aktif ke repository agar segmen difilter sesuai area operasional
         viewModelScope.launch {
-            val bundled = RnimsApiClient.loadBundledMpoSegments(application)
-            if (bundled.isNotEmpty()) {
-                _mpoSegments.value = bundled
+            currentUser.collect { session ->
+                repository.setAreaFilter(session.areaId)
+            }
+        }
+
+        // Preload bundled segments offline untuk area aktif
+        viewModelScope.launch {
+            val allBundled = RnimsApiClient.loadBundledSegments(application)
+            if (allBundled.isNotEmpty()) {
+                val areaId = currentUser.value.areaId
+                val forArea = allBundled.filter { it.area_id == areaId }
+                _mpoSegments.value = if (forArea.isNotEmpty()) forArea else allBundled
             }
         }
 
@@ -389,31 +444,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _mpoSegments.value = list
                     _rnimsSyncMessage.value = "Berhasil menarik ${list.size} Segmen dari server RNIMS (Area $targetAreaId)"
                 } else {
-                    if (targetAreaId == 18) {
-                        val bundled = RnimsApiClient.loadBundledMpoSegments(getApplication())
-                        _mpoSegments.value = bundled
-                        _rnimsSyncMessage.value = "Server Terhubung (200 OK): Mengaktifkan 143 segmen MPO data master lokal."
-                    } else {
-                        _rnimsSyncMessage.value = "Belum ada segmen dari server untuk Area $targetAreaId."
-                    }
+                    val allBundled = RnimsApiClient.loadBundledSegments(getApplication())
+                    val forArea = allBundled.filter { it.area_id == targetAreaId }
+                    _mpoSegments.value = if (forArea.isNotEmpty()) forArea else allBundled
+                    _rnimsSyncMessage.value = "Server Terhubung: Mengaktifkan ${forArea.size} segmen data master lokal untuk Area $targetAreaId."
                 }
             }.onFailure { err ->
                 val errMsg = err.message ?: ""
                 val isRedisOr503 = errMsg.contains("503") || errMsg.contains("REDIS", ignoreCase = true)
-                if (targetAreaId == 18) {
-                    val bundled = RnimsApiClient.loadBundledMpoSegments(getApplication())
-                    if (bundled.isNotEmpty()) {
-                        _mpoSegments.value = bundled
-                    }
-                    if (isRedisOr503) {
-                        _rnimsSyncMessage.value = "Server Online, namun respons HTTP 503 (Redis cache backend belum siap). 143 Segmen MPO dialihkan ke data master lokal."
-                        testRnimsConnection()
-                    } else {
-                        _rnimsSyncMessage.value = "Server tidak terjangkau ($errMsg). Menggunakan 143 segmen offline bawaan."
-                        _rnimsServerConnected.value = false
-                    }
+                val allBundled = RnimsApiClient.loadBundledSegments(getApplication())
+                val forArea = allBundled.filter { it.area_id == targetAreaId }
+                if (forArea.isNotEmpty()) {
+                    _mpoSegments.value = forArea
+                }
+                if (isRedisOr503) {
+                    _rnimsSyncMessage.value = "Server Online (503). Mengaktifkan ${forArea.size} segmen master lokal (Area $targetAreaId)."
+                    testRnimsConnection()
                 } else {
-                    _rnimsSyncMessage.value = "Server tidak terjangkau ($errMsg) untuk Area $targetAreaId."
+                    _rnimsSyncMessage.value = "Mode Offline: Mengaktifkan ${forArea.size} segmen lokal bawaan untuk Area $targetAreaId."
                     _rnimsServerConnected.value = false
                 }
             }
@@ -423,6 +471,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setOperationalArea(areaId: Int, areaLabel: String) {
         userSessionManager.updateArea(areaId, areaLabel)
+        repository.setAreaFilter(areaId)
         _rnimsSyncMessage.value = "Area operasional diubah ke Area $areaId ($areaLabel)"
         syncMpoSegmentsFromServer(areaId)
     }
@@ -528,6 +577,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _syncPolesMessage.value = msg
                 _isSyncingPoles.value = false
                 onComplete(false, msg)
+            }
+        }
+    }
+
+    /**
+     * Mengunggah hasil survei lapangan dalam format KMZ resmi ke Google Drive via Apps Script Webhook.
+     * Tidak membutuhkan login Google di HP dan otomatis masuk ke folder Area_{id}_{areaLabel}.
+     */
+    fun uploadSurveyToGoogleDrive(
+        targetPoles: List<Pole>? = null,
+        onComplete: (Boolean, GDriveUploadResponse?, String) -> Unit = { _, _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val polesToUpload = targetPoles ?: poles.value.values.toList()
+            if (polesToUpload.isEmpty()) {
+                val msg = "Belum ada data tiang yang disurvei untuk diunggah ke Google Drive."
+                _gdriveUploadMessage.value = msg
+                onComplete(false, null, msg)
+                return@launch
+            }
+
+            _isUploadingGDrive.value = true
+            _gdriveUploadMessage.value = "Membuat paket KMZ survei (koordinat, rute kabel FO, dan foto)..."
+
+            val areaId = currentUser.value.areaId
+            val areaLabel = currentUser.value.areaLabel
+            val activeSeg = repository.project.value.segments.find { it.id == selectedSegmentId.value }
+            val segName = activeSeg?.name ?: "SEGMENT_ALL"
+
+            // 1. Generate KMZ
+            val kmzTimestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val kmzFileName = "SURVEY_${areaLabel}_${segName}_$kmzTimestamp.kmz"
+            val tempDir = File(getApplication<Application>().cacheDir, "gdrive_uploads").apply { if (!exists()) mkdirs() }
+            val tempKmz = File(tempDir, kmzFileName)
+
+            val generatedKmz = withContext(Dispatchers.IO) {
+                exportEngine.generateAlpacaMasterKmz(
+                    poles = polesToUpload,
+                    segmentName = "${project.value.name} - $segName",
+                    importedRoute = activeRoute.value,
+                    targetFile = tempKmz
+                )
+            }
+
+            val sizeKb = generatedKmz.length() / 1024
+            _gdriveUploadMessage.value = "Mengunggah $kmzFileName ($sizeKb KB) ke Google Drive Area $areaId ($areaLabel)..."
+
+            val res = RnimsApiClient.uploadKmzToGoogleDrive(
+                webhookUrl = _gdriveWebhookUrl.value,
+                kmzFile = generatedKmz,
+                areaId = areaId,
+                areaName = areaLabel,
+                segmentName = segName,
+                poleCount = polesToUpload.size,
+                surveyor = currentUser.value.displayName
+            )
+
+            _isUploadingGDrive.value = false
+
+            res.onSuccess { uploadResp ->
+                _gdriveUploadMessage.value = "Berhasil: ${uploadResp.message} (${uploadResp.folder_name}/${uploadResp.file_name})"
+                // Tandai tiang yang diupload sebagai SYNCED
+                viewModelScope.launch(Dispatchers.IO) {
+                    val syncedIds = polesToUpload.map { it.id }
+                    repository.markPolesAsSynced(syncedIds)
+                }
+                onComplete(true, uploadResp, uploadResp.message)
+            }.onFailure { err ->
+                val errMsg = err.message ?: "Gagal upload ke Google Drive"
+                _gdriveUploadMessage.value = "Gagal upload: $errMsg"
+                onComplete(false, null, errMsg)
             }
         }
     }
@@ -824,6 +944,100 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (navigateToDetail) {
             navigateTo(ScreenFlow.SEGMENT_DETAIL)
         }
+
+        // On-Demand fetch: jika segmen belum memiliki tiang, coba tarik dari server (Alpaca PRA)
+        loadOrFetchPolesForSegment(segmentId, forceRefresh = false)
+    }
+
+    /**
+     * Menarik tiang eksisting dari server Alpaca PRA secara on-demand & auto-cache di SQLite Room.
+     * Berlaku universal: jika segmen tidak memiliki tiang di server (misal Ambon, Tual, Saumlaki),
+     * segmen tetap tersimpan dengan 0 tiang dan siap untuk tagging mandiri.
+     */
+    fun loadOrFetchPolesForSegment(segmentId: String, forceRefresh: Boolean = false) {
+        viewModelScope.launch {
+            val existingCount = withContext(Dispatchers.IO) {
+                repository.dao.countPolesInSegment(segmentId)
+            }
+            if (existingCount > 0 && !forceRefresh) {
+                return@launch
+            }
+
+            _isSyncingPoles.value = true
+            _syncPolesMessage.value = "Memeriksa data tiang di server..."
+            val result = repository.pullPolesForSegment(rnimsBaseUrl.value, segmentId)
+            _isSyncingPoles.value = false
+
+            if (result.isSuccess) {
+                val count = result.getOrDefault(0)
+                _syncPolesMessage.value = if (count > 0) {
+                    "Berhasil memuat $count tiang eksisting untuk segmen ini"
+                } else {
+                    "Segmen siap untuk tagging mandiri (0 tiang di server)"
+                }
+            } else {
+                _syncPolesMessage.value = "Segmen mandiri (tanpa tiang server) atau server offline. Siap tagging mandiri."
+            }
+        }
+    }
+
+    /**
+     * Menandai tiang referensi eksisting sebagai NIHIL / TIDAK DITEMUKAN di lapangan.
+     * Tetap tersimpan di database untuk rekonsiliasi audit trail.
+     */
+    fun markPoleMissing(poleId: String, reason: String? = null) {
+        repository.markPoleAsMissing(poleId, reason)
+    }
+
+    /**
+     * Memulihkan tiang yang sebelumnya ditandai NIHIL / TIDAK DITEMUKAN kembali ke status aktif.
+     */
+    fun restoreMissingPole(poleId: String) {
+        repository.restoreMissingPole(poleId)
+    }
+
+    /**
+     * Menambahkan tiang baru di lapangan (Provisional Pole) pada segmen aktif.
+     */
+    fun addProvisionalPoleToCurrentSegment(
+        latitude: Double,
+        longitude: Double,
+        assetClass: String = "pole_9"
+    ): PoleEntity {
+        val currentSegId = selectedSegmentId.value
+        val seg = repository.project.value.segments.find { it.id == currentSegId }
+        val cityCode = seg?.cityCode?.takeIf { it.isNotBlank() } ?: "MPO"
+        return repository.addProvisionalPole(
+            segmentId = currentSegId,
+            latitude = latitude,
+            longitude = longitude,
+            assetClass = assetClass,
+            cityCode = cityCode
+        )
+    }
+
+    /**
+     * Memvalidasi tiang eksisting dengan titik GPS dan foto kamera.
+     */
+    fun validateExistingPole(
+        poleId: String,
+        latitude: Double,
+        longitude: Double,
+        photoPath: String?,
+        assetClass: String = "pole_9",
+        equipment: List<String> = emptyList(),
+        notes: String? = null
+    ) {
+        repository.saveQuickTagPole(
+            poleId = poleId,
+            latitude = latitude,
+            longitude = longitude,
+            photoPath = photoPath,
+            assetClass = assetClass,
+            isExistingPole = true,
+            matchStatus = "MATCHED",
+            notes = notes
+        )
     }
 
     fun createAndStartNewPole(segmentId: String? = null) {
@@ -918,6 +1132,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun removePhoto(photoPath: String) {
         repository.removeDraftPhoto(photoPath)
+    }
+
+    fun setDraftPhotoForSlot(slotIndex: Int, path: String) {
+        repository.setDraftPhotoForSlot(slotIndex, path)
+    }
+
+    fun removeDraftPhotoFromSlot(slotIndex: Int) {
+        repository.removeDraftPhotoFromSlot(slotIndex)
     }
 
     fun savePoleLocally() {

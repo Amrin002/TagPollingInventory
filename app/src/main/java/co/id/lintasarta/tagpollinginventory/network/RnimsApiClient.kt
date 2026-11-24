@@ -1,6 +1,7 @@
 package co.id.lintasarta.tagpollinginventory.network
 
 import android.content.Context
+import co.id.lintasarta.tagpollinginventory.data.model.AlpacaMapResponseDto
 import co.id.lintasarta.tagpollinginventory.data.model.AlpacaPraAssetDto
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
@@ -8,6 +9,7 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -29,7 +31,9 @@ data class RnimsUser(
     @SerializedName(value = "areaLabel", alternate = ["area_label", "area_name", "region"])
     val areaLabel: String = "MPO",
     val role: String? = "SURVEYOR",
-    val roleLabel: String? = "Field Operations"
+    val roleLabel: String? = "Field Operations",
+    @SerializedName(value = "token", alternate = ["access_token", "jwt", "accessToken"])
+    val token: String? = null
 )
 
 data class RnimsSessionResponse(
@@ -43,6 +47,12 @@ data class RnimsSessionResponse(
 data class RnimsRouteCoordinateDto(
     val lat: Double,
     val lng: Double
+)
+
+data class AreaDto(
+    val areaId: Int,
+    val code: String,
+    val name: String
 )
 
 data class RnimsSegmentDto(
@@ -77,12 +87,22 @@ data class ConnectionTestResult(
     val message: String
 )
 
+data class GDriveUploadResponse(
+    val status: String,
+    val message: String,
+    val file_id: String? = null,
+    val file_name: String? = null,
+    val folder_name: String? = null,
+    val file_url: String? = null
+)
+
 object RnimsApiClient {
 
     const val DEFAULT_USB_URL = "http://127.0.0.1:8000"
     const val DEFAULT_EMULATOR_URL = "http://10.0.2.2:8000"
     const val DEFAULT_WIFI_URL = "http://192.168.1.6:8000"
     const val DEFAULT_PROD_URL = "https://rnims.lintasarta.co.id/api"
+    const val DEFAULT_GDRIVE_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbyicszxiQkXKRQ_GM8JyiHvs5EI45auuyvFZ05f8RRBWufiB7C-ik9rT3F9rkdwkee7IQ/exec"
 
     private val gson = Gson()
 
@@ -211,13 +231,22 @@ object RnimsApiClient {
                             val (calcRole, calcRoleLabel) = resolveUserRole(usernameOrEmail, userFromJson?.role, detectedUserId)
                             val calcDisplayName = resolveDisplayName(usernameOrEmail, userFromJson?.displayName, detectedAreaLabel)
 
+                            val detectedToken = userFromJson?.token?.takeIf { it.isNotBlank() }
+                                ?: (rawMap?.get("token") as? String)
+                                ?: (rawMap?.get("access_token") as? String)
+                                ?: (rawMap?.get("accessToken") as? String)
+                                ?: ((rawMap?.get("data") as? Map<*, *>)?.get("token") as? String)
+                                ?: ((rawMap?.get("data") as? Map<*, *>)?.get("access_token") as? String)
+                                ?: ((rawMap?.get("user") as? Map<*, *>)?.get("token") as? String)
+
                             val finalUser = userFromJson?.copy(
                                 userId = detectedUserId,
                                 areaId = detectedAreaId,
                                 areaLabel = detectedAreaLabel,
                                 role = calcRole,
                                 roleLabel = calcRoleLabel,
-                                displayName = calcDisplayName
+                                displayName = calcDisplayName,
+                                token = detectedToken
                             ) ?: RnimsUser(
                                 userId = detectedUserId,
                                 username = if (usernameOrEmail.contains("@")) usernameOrEmail.substringBefore("@") else usernameOrEmail.ifBlank { "surveyor" },
@@ -226,7 +255,8 @@ object RnimsApiClient {
                                 areaId = detectedAreaId,
                                 areaLabel = detectedAreaLabel,
                                 role = calcRole,
-                                roleLabel = calcRoleLabel
+                                roleLabel = calcRoleLabel,
+                                token = detectedToken
                             )
 
                             return@withContext Result.success(finalUser)
@@ -324,11 +354,14 @@ object RnimsApiClient {
         }
 
     /**
-     * Tarik Tiang Eksisting Project Alpaca PRA:
+     * Tarik Peta & Aset Lengkap Segmen dari Project Alpaca PRA:
      * GET /api/otdr/asset-assurance/map?po_id={poId}
-     * Menghasilkan daftar aset tiang eksisting: asset_uid, asset_class, geometry: [lng, lat], match_status
+     * Menghasilkan:
+     * - run: metadata assurance
+     * - ift: MultiLineString rute segmen IFT (180+ titik koordinat)
+     * - assets: list tiang eksisting (Point GeoJSON [lng, lat], asset_class, match_status, feature_name)
      */
-    suspend fun fetchAlpacaExistingPoles(baseUrl: String, poId: String): Result<List<AlpacaPraAssetDto>> =
+    suspend fun fetchSegmentAssetMap(baseUrl: String, poId: String): Result<AlpacaMapResponseDto> =
         withContext(Dispatchers.IO) {
             try {
                 val cleanUrl = baseUrl.trimEnd('/')
@@ -341,7 +374,7 @@ object RnimsApiClient {
                 val url = URL(endpoint)
                 val connection = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 8000
-                    readTimeout = 12000
+                    readTimeout = 15000
                     requestMethod = "GET"
                     setRequestProperty("Accept", "application/json")
                 }
@@ -350,24 +383,40 @@ object RnimsApiClient {
                 if (responseCode in 200..299) {
                     val responseText = connection.inputStream.bufferedReader().use { it.readText() }
                     connection.disconnect()
-                    val type = object : TypeToken<List<AlpacaPraAssetDto>>() {}.type
-                    val poles: List<AlpacaPraAssetDto> = try {
-                        gson.fromJson(responseText, type) ?: emptyList()
-                    } catch (_: Exception) {
-                        // In case response is wrapped in { "data": [...] }
-                        val rawMap = gson.fromJson(responseText, Map::class.java)
-                        val dataObj = rawMap["data"] ?: rawMap["assets"]
-                        gson.fromJson(gson.toJson(dataObj), type) ?: emptyList()
-                    }
-                    Result.success(poles)
+                    val mapResponse = gson.fromJson(responseText, AlpacaMapResponseDto::class.java)
+                    Result.success(mapResponse)
                 } else {
+                    val errDetail = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                     connection.disconnect()
-                    Result.failure(Exception("Gagal mengambil aset Alpaca PRA (HTTP $responseCode)"))
+                    Result.failure(Exception("Gagal mengambil peta aset Alpaca PRA (HTTP $responseCode): $errDetail"))
                 }
             } catch (e: Exception) {
                 Result.failure(e)
             }
         }
+
+    /**
+     * Tarik Tiang Eksisting Project Alpaca PRA (Wrapper kompatibilitas):
+     * GET /api/otdr/asset-assurance/map?po_id={poId}
+     */
+    suspend fun fetchAlpacaExistingPoles(baseUrl: String, poId: String): Result<List<AlpacaPraAssetDto>> =
+        withContext(Dispatchers.IO) {
+            fetchSegmentAssetMap(baseUrl, poId).map { it.assets }
+        }
+
+    /**
+     * Membaca file JSON peta aset dari assets lokal bawaan APK (jika tersedia)
+     */
+    fun loadBundledAssetMap(context: Context, assetFileName: String): AlpacaMapResponseDto? {
+        return try {
+            context.assets.open(assetFileName).use { stream ->
+                val reader = BufferedReader(InputStreamReader(stream))
+                gson.fromJson(reader, AlpacaMapResponseDto::class.java)
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     /**
      * Tarik Segmen Khusus Alpaca Project:
@@ -497,18 +546,155 @@ object RnimsApiClient {
     }
 
     /**
-     * Fallback Offline: Membaca 143 segmen MPO dari assets lokal bawaan APK
+     * Membaca seluruh 2,505 segmen nasional dari assets/all_segments.json bawaan APK
+     * (dengan fallback otomatis ke mpo_segments.json).
      */
-    fun loadBundledMpoSegments(context: Context): List<RnimsSegmentDto> {
+    fun loadBundledSegments(context: Context): List<RnimsSegmentDto> {
         return try {
-            context.assets.open("mpo_segments.json").use { stream ->
+            val assetName = try {
+                if (context.assets.list("")?.contains("all_segments.json") == true) "all_segments.json" else "mpo_segments.json"
+            } catch (_: Exception) {
+                "all_segments.json"
+            }
+            context.assets.open(assetName).use { stream ->
                 val reader = BufferedReader(InputStreamReader(stream))
                 val type = object : TypeToken<List<RnimsSegmentDto>>() {}.type
                 gson.fromJson(reader, type)
             }
         } catch (e: Exception) {
             e.printStackTrace()
+            try {
+                context.assets.open("mpo_segments.json").use { stream ->
+                    val reader = BufferedReader(InputStreamReader(stream))
+                    val type = object : TypeToken<List<RnimsSegmentDto>>() {}.type
+                    gson.fromJson(reader, type)
+                }
+            } catch (ex: Exception) {
+                ex.printStackTrace()
+                emptyList()
+            }
+        }
+    }
+
+    /**
+     * Membaca master data 24 area operasional dari assets/areas.json
+     */
+    fun loadBundledAreas(context: Context): List<AreaDto> {
+        return try {
+            context.assets.open("areas.json").use { stream ->
+                val reader = BufferedReader(InputStreamReader(stream))
+                val type = object : TypeToken<List<AreaDto>>() {}.type
+                gson.fromJson(reader, type)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
             emptyList()
+        }
+    }
+
+    /**
+     * Fallback Offline: Membaca segmen MPO (Area 18) dari assets lokal bawaan APK
+     */
+    fun loadBundledMpoSegments(context: Context): List<RnimsSegmentDto> {
+        val all = loadBundledSegments(context)
+        val mpo = all.filter { it.area_id == 18 }
+        return if (mpo.isNotEmpty()) mpo else all
+    }
+
+    /**
+     * Mengunggah file KMZ ke Google Drive via Google Apps Script Webhook.
+     * Tidak membutuhkan login akun Google di HP surveyor.
+     * Mengikuti HTTP 302 redirect Google Apps Script secara otomatis.
+     */
+    suspend fun uploadKmzToGoogleDrive(
+        webhookUrl: String = DEFAULT_GDRIVE_WEBHOOK_URL,
+        kmzFile: File,
+        areaId: Int,
+        areaName: String,
+        segmentName: String,
+        poleCount: Int,
+        surveyor: String = "Field Surveyor"
+    ): Result<GDriveUploadResponse> = withContext(Dispatchers.IO) {
+        try {
+            if (!kmzFile.exists() || kmzFile.length() == 0L) {
+                return@withContext Result.failure(Exception("File KMZ tidak ditemukan atau kosong"))
+            }
+
+            val fileBytes = kmzFile.readBytes()
+            val base64Content = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
+
+            val payloadMap = mapOf(
+                "area_id" to areaId,
+                "area_name" to areaName,
+                "segment_name" to segmentName,
+                "file_name" to kmzFile.name,
+                "file_base64" to base64Content,
+                "pole_count" to poleCount,
+                "surveyor" to surveyor
+            )
+            val jsonPayload = gson.toJson(payloadMap)
+
+            var currentUrl = webhookUrl.trim()
+            val maxRedirects = 5
+            var redirectCount = 0
+
+            var connection: HttpURLConnection? = null
+            var responseBody = ""
+            var responseCode = -1
+
+            while (redirectCount < maxRedirects) {
+                val urlObj = URL(currentUrl)
+                connection = (urlObj.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 45000
+                    readTimeout = 90000
+                    setRequestProperty("User-Agent", "TagPolling-Android")
+                }
+
+                if (redirectCount == 0) {
+                    connection.apply {
+                        requestMethod = "POST"
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                    }
+                    connection.outputStream.use { os ->
+                        os.write(jsonPayload.toByteArray(Charsets.UTF_8))
+                        os.flush()
+                    }
+                } else {
+                    connection.apply {
+                        requestMethod = "GET"
+                    }
+                }
+
+                responseCode = connection.responseCode
+
+                // Google Apps Script redirects with 302 or 303 to script.googleusercontent.com
+                if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                    responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                    responseCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                    responseCode == 307 || responseCode == 308) {
+                    val location = connection.getHeaderField("Location")
+                    if (!location.isNullOrBlank()) {
+                        currentUrl = location
+                        redirectCount++
+                        connection.disconnect()
+                        continue
+                    }
+                }
+                break
+            }
+
+            if (responseCode in 200..299) {
+                responseBody = connection?.inputStream?.bufferedReader()?.use { it.readText() } ?: ""
+                val resp = gson.fromJson(responseBody, GDriveUploadResponse::class.java)
+                Result.success(resp)
+            } else {
+                val errBody = connection?.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                Result.failure(Exception("HTTP $responseCode: $errBody"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
         }
     }
 }

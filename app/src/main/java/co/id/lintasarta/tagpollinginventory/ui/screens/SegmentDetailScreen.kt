@@ -13,8 +13,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,8 +27,10 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import co.id.lintasarta.tagpollinginventory.data.model.PoleEntity
 import co.id.lintasarta.tagpollinginventory.data.model.RouteCoordinate
 import co.id.lintasarta.tagpollinginventory.data.model.Segment
 import co.id.lintasarta.tagpollinginventory.data.model.SegmentStatus
@@ -131,9 +137,15 @@ fun SegmentDetailScreen(
 
     val completedCount = segmentPoles.count { it.status == TagStatus.COMPLETED }
     val conflictCount = segmentPoles.count { it.status == TagStatus.CONFLICT }
-    val remainingCount = segmentPoles.size - completedCount
+    val missingCount = segmentPoles.count { it.status == TagStatus.MISSING }
+    val remainingCount = segmentPoles.size - completedCount - missingCount
+
+    val isSyncingPoles by viewModel.isSyncingPoles.collectAsState()
+    val syncPolesMessage by viewModel.syncPolesMessage.collectAsState()
 
     var showCompleteDialog by remember { mutableStateOf(false) }
+    var poleToMarkMissing by remember { mutableStateOf<PoleEntity?>(null) }
+    var missingReasonText by remember { mutableStateOf("Nihil Lapangan / Tidak Ditemukan") }
 
     if (showCompleteDialog) {
         AlertDialog(
@@ -150,6 +162,61 @@ fun SegmentDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCompleteDialog = false }) {
+                    Text("BATAL")
+                }
+            }
+        )
+    }
+
+    if (poleToMarkMissing != null) {
+        val target = poleToMarkMissing!!
+        AlertDialog(
+            onDismissRequest = { poleToMarkMissing = null },
+            title = { Text("Tandai Tiang Nihil / Tidak Ditemukan?") },
+            text = {
+                Column {
+                    Text(
+                        text = "Tiang ${target.effectiveAssetUid} (PL ${target.sequence}) akan ditandai sebagai NIHIL.\n" +
+                               "Aset tidak akan dihapus dan tetap masuk dalam audit rekonsiliasi eNims/Alpaca.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF37474F)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Pilih alasan:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = missingReasonText,
+                        onValueChange = { missingReasonText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        listOf("Nihil Lapangan", "Tiang Roboh", "Jalur Dipindahkan").forEach { opt ->
+                            SuggestionChip(
+                                onClick = { missingReasonText = opt },
+                                label = { Text(opt, fontSize = 10.sp) }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.markPoleMissing(target.id, missingReasonText)
+                        poleToMarkMissing = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
+                ) {
+                    Text("TANDAI NIHIL", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { poleToMarkMissing = null }) {
                     Text("BATAL")
                 }
             }
@@ -398,23 +465,42 @@ fun SegmentDetailScreen(
                         )
 
                         Text(
-                            text = "Rute kabel fiber optic sepanjang ${(effectiveRouteCoords.size * 0.05).coerceAtLeast(activeSegment.lengthMeters / 1000.0).coerceAtLeast(0.5)} km telah dimuat di minimap atas.\nKlik tombol di bawah untuk mulai mensurvei tiang pertama (PL 1).",
+                            text = "Rute kabel fiber optic sepanjang ${(effectiveRouteCoords.size * 0.05).coerceAtLeast(activeSegment.lengthMeters / 1000.0).coerceAtLeast(0.5)} km telah dimuat di minimap atas.\n" +
+                                   "Segmen ini dapat disurvei dari awal atau ditarik tiang eksistingnya jika terdaftar di server Alpaca PRA.",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.Gray,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(horizontal = 16.dp)
                         )
 
-                        Button(
-                            onClick = {
-                                viewModel.startQuickTaggingForSegment(activeSegment.id)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Mulai Tagging Tiang Pertama (PL 1)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        if (isSyncingPoles) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), color = TelecomPrimary)
+                            Text(syncPolesMessage ?: "Menghubungi server...", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = {
+                                        viewModel.startQuickTaggingForSegment(activeSegment.id)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00897B)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Tag Tiang Baru (PL 1)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        viewModel.loadOrFetchPolesForSegment(activeSegment.id, forceRefresh = true)
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Tarik Server (Alpaca)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -434,17 +520,32 @@ fun SegmentDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "TIANG PADA SEGMEN INI (${segmentPoles.size})",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF546E7A)
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "TIANG PADA SEGMEN INI (${segmentPoles.size})",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF546E7A)
+                                )
+                                if (isSyncingPoles) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                }
+                            }
 
-                            TextButton(onClick = { viewModel.createAndStartNewPole(activeSegment.id) }) {
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Tambah Tiang", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { viewModel.loadOrFetchPolesForSegment(activeSegment.id, forceRefresh = true) },
+                                    enabled = !isSyncingPoles
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = "Tarik Server", tint = TelecomPrimary, modifier = Modifier.size(20.dp))
+                                }
+
+                                TextButton(onClick = { viewModel.createAndStartNewPole(activeSegment.id) }) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Tambah Tiang", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
                             }
                         }
                     }
@@ -468,6 +569,8 @@ fun SegmentDetailScreen(
 
                     items(segmentPoles) { pole ->
                         val isSelected = (pole.id == targetPoleId)
+                        val isMissing = (pole.status == TagStatus.MISSING)
+
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -475,7 +578,9 @@ fun SegmentDetailScreen(
                                     viewModel.openPoleDetail(pole.id)
                                 },
                             shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isMissing) Color(0xFFF5F5F5) else Color.White
+                            ),
                             border = if (isSelected) BorderStroke(2.dp, Color(0xFF00E5FF)) else null,
                             elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 3.dp else 1.dp)
                         ) {
@@ -494,6 +599,7 @@ fun SegmentDetailScreen(
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = when {
+                                            isMissing -> Color(0xFFE0E0E0)
                                             isSelected -> Color(0xFF00E5FF)
                                             pole.status == TagStatus.COMPLETED -> Color(0xFFE8F5E9)
                                             pole.status == TagStatus.CONFLICT -> Color(0xFFFFEBEE)
@@ -506,6 +612,7 @@ fun SegmentDetailScreen(
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = when {
+                                                isMissing -> Color(0xFF616161)
                                                 isSelected -> Color(0xFF004D40)
                                                 pole.status == TagStatus.COMPLETED -> Color(0xFF2E7D32)
                                                 pole.status == TagStatus.CONFLICT -> Color(0xFFC62828)
@@ -521,14 +628,24 @@ fun SegmentDetailScreen(
                                             text = pole.effectiveAssetUid,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF263238)
+                                            textDecoration = if (isMissing) TextDecoration.LineThrough else TextDecoration.None,
+                                            color = if (isMissing) Color.Gray else Color(0xFF263238)
                                         )
+
+                                        val provenanceLabel = when {
+                                            isMissing -> " • [NIHIL: ${pole.missingReason ?: "Tidak Ditemukan"}]"
+                                            pole.matchStatus == "PROVISIONAL" -> " • Tiang Baru Lapangan"
+                                            pole.isExistingPole && pole.status == TagStatus.NOT_TAGGED -> " • Eksisting (Belum Tervalidasi)"
+                                            else -> ""
+                                        }
+
                                         Text(
-                                            text = "${pole.assetClass.uppercase()} (${pole.height}) • ${pole.type.displayName} • ${pole.ownership.displayName}",
+                                            text = "${pole.assetClass.uppercase()} (${pole.height}) • ${pole.type.displayName}$provenanceLabel",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color.Gray,
+                                            color = if (isMissing) Color(0xFFC62828) else Color.Gray,
                                             fontSize = 11.sp
                                         )
+
                                         if (pole.latitude != 0.0 && pole.longitude != 0.0) {
                                             Text(
                                                 text = "GPS: ${String.format(Locale.US, "%.5f", pole.latitude)}, ${String.format(Locale.US, "%.5f", pole.longitude)} (±${pole.accuracy}m)",
@@ -541,8 +658,38 @@ fun SegmentDetailScreen(
                                 }
 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isMissing) {
+                                        IconButton(
+                                            onClick = { viewModel.restoreMissingPole(pole.id) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Restore,
+                                                contentDescription = "Pulihkan",
+                                                tint = Color(0xFF1976D2),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    } else if (pole.status == TagStatus.NOT_TAGGED) {
+                                        IconButton(
+                                            onClick = {
+                                                missingReasonText = "Nihil Lapangan / Tidak Ditemukan"
+                                                poleToMarkMissing = pole
+                                            },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Warning,
+                                                contentDescription = "Tandai Nihil",
+                                                tint = Color(0xFFEF5350),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     TagStatusBadge(status = pole.status)
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Icon(
                                         imageVector = Icons.Default.ChevronRight,
                                         contentDescription = null,

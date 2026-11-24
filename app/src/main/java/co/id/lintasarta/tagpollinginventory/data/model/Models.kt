@@ -29,7 +29,8 @@ enum class MatchStatus(val code: String, val displayName: String) {
     MATCHED("MATCHED", "Matched"),
     ANOMALY("ANOMALY", "Anomaly"),
     UNMATCHED("UNMATCHED", "Unmatched"),
-    PROVISIONAL("PROVISIONAL", "Provisional New");
+    PROVISIONAL("PROVISIONAL", "Provisional New"),
+    MISSING("MISSING", "Nihil Lapangan / Tidak Ditemukan");
 
     companion object {
         fun fromCode(code: String?): MatchStatus {
@@ -69,7 +70,8 @@ enum class CableCondition(val displayName: String) {
 enum class TagStatus(val displayName: String) {
     NOT_TAGGED("Not Tagged"),
     COMPLETED("Completed"),
-    CONFLICT("Conflict")
+    CONFLICT("Conflict"),
+    MISSING("Missing")
 }
 
 enum class SegmentStatus(val displayName: String) {
@@ -169,7 +171,8 @@ data class PoleEntity(
     val notes: String = "",
     val isSafetyDeferred: Boolean = false, // Evaluasi keselamatan / tiang terhalang
     val safetyDeferralReason: String? = null,
-    val matchStatus: String = "MATCHED", // MATCHED, ANOMALY, UNMATCHED, PROVISIONAL
+    val missingReason: String? = null, // Catatan bila tiang fisik nihil / tidak ditemukan
+    val matchStatus: String = "MATCHED", // MATCHED, ANOMALY, UNMATCHED, PROVISIONAL, MISSING
     val isExistingPole: Boolean = false,
     val isLocationLocked: Boolean = false,
     val originalLatitude: Double? = null,
@@ -177,7 +180,9 @@ data class PoleEntity(
     val photoPaths: List<String> = if (!photoPath.isNullOrEmpty()) listOf(photoPath) else emptyList(),
     val status: TagStatus = if (isSafetyDeferred) {
         TagStatus.CONFLICT
-    } else if (syncStatus == "SYNCED" || isExistingPole) {
+    } else if (matchStatus == "MISSING") {
+        TagStatus.MISSING
+    } else if (syncStatus == "SYNCED") {
         TagStatus.COMPLETED
     } else if (condition == PoleCondition.CRITICAL || condition == PoleCondition.DAMAGED) {
         TagStatus.CONFLICT
@@ -200,10 +205,12 @@ data class PoleEntity(
 
 fun PoleEntity.calculateStatus(): TagStatus {
     return when {
+        matchStatus == "MISSING" -> TagStatus.MISSING
         isSafetyDeferred -> TagStatus.CONFLICT
         condition == PoleCondition.CRITICAL || condition == PoleCondition.DAMAGED -> TagStatus.CONFLICT
-        syncStatus == "SYNCED" || isExistingPole -> TagStatus.COMPLETED
+        syncStatus == "SYNCED" -> TagStatus.COMPLETED
         latitude != 0.0 && !photoPath.isNullOrEmpty() -> TagStatus.COMPLETED
+        isExistingPole && photoPath.isNullOrEmpty() -> TagStatus.NOT_TAGGED
         else -> status
     }
 }

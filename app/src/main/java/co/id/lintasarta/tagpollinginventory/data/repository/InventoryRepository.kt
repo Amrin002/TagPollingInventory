@@ -2,9 +2,11 @@ package co.id.lintasarta.tagpollinginventory.data.repository
 
 import android.content.Context
 import android.util.Log
+import co.id.lintasarta.tagpollinginventory.camera.calculateFileSha256
 import co.id.lintasarta.tagpollinginventory.data.local.AppDatabase
 import co.id.lintasarta.tagpollinginventory.data.model.*
 import co.id.lintasarta.tagpollinginventory.ui.screens.deriveCodesFromSegmentName
+import co.id.lintasarta.tagpollinginventory.network.AreaDto
 import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -12,7 +14,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -44,30 +48,48 @@ class InventoryRepository(private val context: Context) {
     private val _currentDraftPole = MutableStateFlow<PoleEntity?>(null)
     val currentDraftPole: StateFlow<PoleEntity?> = _currentDraftPole.asStateFlow()
 
+    val areas: List<AreaDto> = RnimsApiClient.loadBundledAreas(context)
+
+    private val _selectedAreaId = MutableStateFlow<Int>(18)
+    val selectedAreaId: StateFlow<Int> = _selectedAreaId.asStateFlow()
+
+    fun setAreaFilter(areaId: Int) {
+        _selectedAreaId.value = areaId
+    }
+
     init {
         if (oldDataFile.exists()) {
             oldDataFile.delete()
         }
 
-        // Observasi daftar Segmen dari SQLite Room
+        // Observasi daftar Segmen dari SQLite Room, difilter berdasarkan areaId operasional yang aktif (Group by Area ID)
         scope.launch {
-            dao.getAllSegmentsFlow().collect { segs ->
+            combine(dao.getAllSegmentsFlow(), _selectedAreaId) { allSegs, areaId ->
+                val filtered = if (areaId > 0) allSegs.filter { it.areaId == areaId } else allSegs
+                val totalPoles = filtered.sumOf { it.totalPoles }
+                val completedPoles = filtered.sumOf { it.completedPoles }
+                val conflictPoles = filtered.sumOf { it.conflictPoles }
+
+                val currentArea = areas.find { it.areaId == areaId }
+                val areaCode = currentArea?.code ?: "MPO"
+                val areaName = currentArea?.name ?: "Maluku Papua Operation"
+
                 val p = _project.value
-                val totalPoles = segs.sumOf { it.totalPoles }
-                val completedPoles = segs.sumOf { it.completedPoles }
-                val conflictPoles = segs.sumOf { it.conflictPoles }
                 _project.value = p.copy(
-                    segments = segs,
+                    id = "PRJ-$areaCode-ALPACA",
+                    name = "Alpaca PRA - Regional Fiber Optic Survey",
+                    location = "Area $areaId $areaName ($areaCode)",
+                    segments = filtered,
                     totalPoles = totalPoles,
                     completedPoles = completedPoles,
                     conflictPoles = conflictPoles,
                     uncompletedPoles = (totalPoles - completedPoles).coerceAtLeast(0)
                 )
 
-                if (_selectedSegmentId.value.isEmpty() && segs.isNotEmpty()) {
-                    _selectedSegmentId.value = segs.first().id
+                if (filtered.isNotEmpty() && (_selectedSegmentId.value.isEmpty() || filtered.none { it.id == _selectedSegmentId.value })) {
+                    _selectedSegmentId.value = filtered.first().id
                 }
-            }
+            }.collect { }
         }
 
         // Observasi seluruh tiang dari SQLite Room
@@ -93,31 +115,36 @@ class InventoryRepository(private val context: Context) {
             }
         }
 
-        // Auto-seed 143 segmen MPO jika tabel segments di Room masih kosong
+        // Auto-seed 2,505 segmen nasional jika tabel segments di Room masih kosong atau kurang dari 2,500
         scope.launch {
             val existingSegments = dao.getAllSegmentsSync()
-            if (existingSegments.isEmpty()) {
-                seedMpoSegments()
+            if (existingSegments.size < 2500) {
+                seedAllSegments()
             }
         }
     }
 
     /**
-     * Membaca dan menanam (seed) 143 segmen MPO dari assets/mpo_segments.json ke database Room
+     * Membaca dan menanam (seed) seluruh 2,505 segmen nasional dari assets/all_segments.json ke database Room.
+     * Mengelompokkan segmen berdasarkan area_id dan memelihara data progres tiang yang sudah disurvei.
      */
-    fun seedMpoSegments(forceReload: Boolean = false) {
+    fun seedAllSegments(forceReload: Boolean = false) {
         scope.launch {
             val current = dao.getAllSegmentsSync()
-            if (current.isNotEmpty() && !forceReload) return@launch
+            if (current.size >= 2500 && !forceReload) return@launch
 
-            val bundledDtos = RnimsApiClient.loadBundledMpoSegments(context)
+            val bundledDtos = RnimsApiClient.loadBundledSegments(context)
             if (bundledDtos.isEmpty()) return@launch
 
+            val existingMap = current.associateBy { it.id }
             val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
             val seededSegments = bundledDtos.map { dto ->
                 val coords = dto.route_path?.map {
                     RouteCoordinate(longitude = it.lng, latitude = it.lat)
                 } ?: emptyList()
+
+                val segId = "SEG-${dto.id}"
+                val existing = existingMap[segId]
 
                 val cityCode = dto.org_site?.take(3)?.uppercase() ?: "TMK"
                 val locationCode = dto.dst_site?.take(3)?.uppercase() ?: "PMK"
@@ -125,7 +152,7 @@ class InventoryRepository(private val context: Context) {
                 val priorityKey = determinePriorityRouteKey(dto.segment_name, dto.org_site, dto.dst_site)
 
                 SegmentEntity(
-                    id = "SEG-${dto.id}",
+                    id = segId,
                     name = dto.segment_name,
                     lengthMeters = dto.distance,
                     routeCoordinates = coords,
@@ -137,46 +164,34 @@ class InventoryRepository(private val context: Context) {
                     cityFilterKey = cityFilter,
                     isAlpacaProject = true,
                     priorityRouteKey = priorityKey,
-                    poId = "PO-MPO-${dto.id}",
+                    poId = "PO-AREA${dto.area_id}-${dto.id}",
                     route = if (dto.org_site.isNullOrEmpty()) dto.segment_name else "${dto.org_site} -> ${dto.dst_site}",
                     description = "Segmen FO ${dto.org_site ?: ""} - ${dto.dst_site ?: ""}",
                     startPoint = if (coords.isNotEmpty()) Pair(coords.first().latitude, coords.first().longitude) else Pair(0.0, 0.0),
                     endPoint = if (coords.isNotEmpty()) Pair(coords.last().latitude, coords.last().longitude) else Pair(0.0, 0.0),
-                    status = SegmentStatus.NOT_STARTED,
-                    totalPoles = 0,
-                    completedPoles = 0,
-                    conflictPoles = 0,
-                    isPinned = false,
+                    status = existing?.status ?: SegmentStatus.NOT_STARTED,
+                    totalPoles = existing?.totalPoles ?: 0,
+                    completedPoles = existing?.completedPoles ?: 0,
+                    conflictPoles = existing?.conflictPoles ?: 0,
+                    isPinned = existing?.isPinned ?: false,
                     cityCode = cityCode,
                     locationCode = locationCode,
-                    currentSequence = 0,
-                    createdAt = now,
+                    currentSequence = existing?.currentSequence ?: 0,
+                    createdAt = existing?.createdAt ?: now,
                     updatedAt = now
                 )
             }
 
             dao.insertSegments(seededSegments)
-
-            val initialProject = Project(
-                id = "PRJ-MPO-ALPACA",
-                name = "Alpaca PRA - Regional Fiber Optic Survey",
-                location = "Area 18 Maluku Papua Operation",
-                totalPoles = 0,
-                completedPoles = 0,
-                conflictPoles = 0,
-                uncompletedPoles = 0,
-                totalP7 = 0,
-                totalP9 = 0,
-                segments = seededSegments
-            )
-            _project.value = initialProject
-
-            if (_selectedSegmentId.value.isEmpty() || _selectedSegmentId.value == "SEG-19") {
-                seededSegments.firstOrNull()?.let { firstSeg ->
-                    _selectedSegmentId.value = firstSeg.id
-                }
-            }
+            Log.i("InventoryRepository", "Seeded ${seededSegments.size} segments into Room successfully.")
         }
+    }
+
+    /**
+     * Kompatibilitas mundur: memanggil seedAllSegments()
+     */
+    fun seedMpoSegments(forceReload: Boolean = false) {
+        seedAllSegments(forceReload)
     }
 
     private fun determinePriorityRouteKey(name: String, orgSite: String?, dstSite: String?): String {
@@ -193,6 +208,25 @@ class InventoryRepository(private val context: Context) {
     }
 
     private fun determineCityFilterKey(orgCity: String?, dstCity: String?, orgSite: String?): String {
+        val cityRaw = when {
+            !orgCity.isNullOrBlank() -> orgCity
+            !dstCity.isNullOrBlank() -> dstCity
+            else -> ""
+        }
+        if (cityRaw.isNotBlank()) {
+            val cleaned = cityRaw
+                .replace("Kabupaten ", "", ignoreCase = true)
+                .replace("Kota ", "", ignoreCase = true)
+                .replace(" Regency", "", ignoreCase = true)
+                .replace(" City", "", ignoreCase = true)
+                .trim()
+            if (cleaned.isNotBlank()) {
+                return cleaned.split(" ").joinToString(" ") { word ->
+                    word.lowercase(Locale.ROOT).replaceFirstChar { it.uppercase(Locale.ROOT) }
+                }
+            }
+        }
+
         val text = "${orgCity.orEmpty()} ${dstCity.orEmpty()} ${orgSite.orEmpty()}".lowercase(Locale.ROOT)
         return when {
             text.contains("mimika") || text.contains("timika") || text.contains("tmk") -> "Timika"
@@ -598,8 +632,35 @@ class InventoryRepository(private val context: Context) {
 
     fun setDraftPhotoForSlot(slotIndex: Int, photoPath: String) {
         val current = _currentDraftPole.value ?: return
-        val updated = current.copy(photoPath = photoPath)
+        val baseList = if (current.photoPaths.isNotEmpty()) current.photoPaths
+                       else if (!current.photoPath.isNullOrEmpty()) listOf(current.photoPath!!)
+                       else emptyList()
+        val currentSlots = normalizePhotoSlots(baseList)
+        if (slotIndex in 0..9) {
+            val oldPath = currentSlots[slotIndex]
+            if (oldPath.isNotEmpty() && oldPath != photoPath) {
+                try {
+                    val oldFile = File(oldPath)
+                    if (oldFile.exists()) oldFile.delete()
+                } catch (_: Exception) {}
+            }
+            currentSlots[slotIndex] = photoPath
+        }
+        val primaryPhoto = currentSlots.firstOrNull { it.isNotEmpty() } ?: photoPath
+        val sha256 = try {
+            calculateFileSha256(File(primaryPhoto))
+        } catch (_: Exception) {
+            current.photoSha256
+        }
+        val updated = current.copy(
+            photoPath = primaryPhoto,
+            photoSha256 = sha256,
+            photoPaths = currentSlots.toList()
+        )
         _currentDraftPole.value = updated
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[updated.id] = updated
+        _poles.value = updatedMap
         scope.launch {
             dao.insertPole(updated)
         }
@@ -607,12 +668,34 @@ class InventoryRepository(private val context: Context) {
 
     fun removeDraftPhotoFromSlot(slotIndex: Int) {
         val current = _currentDraftPole.value ?: return
-        current.photoPath?.let { oldPath ->
-            val file = File(oldPath)
-            if (file.exists()) file.delete()
+        val baseList = if (current.photoPaths.isNotEmpty()) current.photoPaths
+                       else if (!current.photoPath.isNullOrEmpty()) listOf(current.photoPath!!)
+                       else emptyList()
+        val currentSlots = normalizePhotoSlots(baseList)
+        if (slotIndex in 0..9) {
+            val oldSlotPath = currentSlots[slotIndex]
+            if (oldSlotPath.isNotEmpty()) {
+                try {
+                    val file = File(oldSlotPath)
+                    if (file.exists()) file.delete()
+                } catch (_: Exception) {}
+                currentSlots[slotIndex] = ""
+            }
         }
-        val updated = current.copy(photoPath = null, photoSha256 = null)
+        val remainingPhotos = currentSlots.filter { it.isNotEmpty() }
+        val primaryPhoto = remainingPhotos.firstOrNull()
+        val sha256 = primaryPhoto?.let {
+            try { calculateFileSha256(File(it)) } catch (_: Exception) { null }
+        }
+        val updated = current.copy(
+            photoPath = primaryPhoto,
+            photoSha256 = sha256,
+            photoPaths = currentSlots.toList()
+        )
         _currentDraftPole.value = updated
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[updated.id] = updated
+        _poles.value = updatedMap
         scope.launch {
             dao.insertPole(updated)
         }
@@ -620,11 +703,9 @@ class InventoryRepository(private val context: Context) {
 
     fun addDraftPhoto(photoPath: String) {
         val current = _currentDraftPole.value ?: return
-        val updated = current.copy(photoPath = photoPath)
-        _currentDraftPole.value = updated
-        scope.launch {
-            dao.insertPole(updated)
-        }
+        val currentSlots = normalizePhotoSlots(current.photoPaths)
+        val targetIndex = currentSlots.indexOfFirst { it.isEmpty() }.let { if (it == -1) 0 else it }
+        setDraftPhotoForSlot(targetIndex, photoPath)
     }
 
     fun addDraftPhotoWithNotes(photoPath: String, additionalNote: String) {
@@ -632,8 +713,32 @@ class InventoryRepository(private val context: Context) {
         val updatedNotes = if (additionalNote.isNotBlank()) {
             if (current.notes.isEmpty()) "[Tambahan]: $additionalNote" else "${current.notes}\n[Tambahan]: $additionalNote"
         } else current.notes
-        val updated = current.copy(photoPath = photoPath, notes = updatedNotes)
+        val currentSlots = normalizePhotoSlots(current.photoPaths)
+        val targetIndex = currentSlots.indexOfFirst { it.isEmpty() }.let { if (it == -1) 0 else it }
+        val oldPath = currentSlots[targetIndex]
+        if (oldPath.isNotEmpty() && oldPath != photoPath) {
+            try {
+                val oldFile = File(oldPath)
+                if (oldFile.exists()) oldFile.delete()
+            } catch (_: Exception) {}
+        }
+        currentSlots[targetIndex] = photoPath
+        val primaryPhoto = currentSlots.firstOrNull { it.isNotEmpty() } ?: photoPath
+        val sha256 = try {
+            calculateFileSha256(File(primaryPhoto))
+        } catch (_: Exception) {
+            current.photoSha256
+        }
+        val updated = current.copy(
+            photoPath = primaryPhoto,
+            photoSha256 = sha256,
+            photoPaths = currentSlots.toList(),
+            notes = updatedNotes
+        )
         _currentDraftPole.value = updated
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[updated.id] = updated
+        _poles.value = updatedMap
         scope.launch {
             dao.insertPole(updated)
         }
@@ -641,7 +746,10 @@ class InventoryRepository(private val context: Context) {
 
     fun removeDraftPhoto(photoPath: String) {
         val current = _currentDraftPole.value ?: return
-        if (current.photoPath == photoPath) {
+        val slotIndex = current.photoPaths.indexOf(photoPath)
+        if (slotIndex >= 0) {
+            removeDraftPhotoFromSlot(slotIndex)
+        } else if (current.photoPath == photoPath) {
             removeDraftPhotoFromSlot(0)
         }
     }
@@ -661,15 +769,26 @@ class InventoryRepository(private val context: Context) {
             draft.isSafetyDeferred -> TagStatus.CONFLICT
             draft.condition == PoleCondition.CRITICAL || draft.condition == PoleCondition.DAMAGED -> TagStatus.CONFLICT
             draft.isExistingPole || draft.syncStatus == "SYNCED" -> TagStatus.COMPLETED
-            draft.latitude != 0.0 && !draft.photoPath.isNullOrEmpty() -> TagStatus.COMPLETED
+            draft.latitude != 0.0 && (!draft.photoPath.isNullOrEmpty() || draft.photoPaths.any { it.isNotEmpty() }) -> TagStatus.COMPLETED
             else -> TagStatus.NOT_TAGGED
         }
+
+        val preservedPhotoPaths = if (draft.photoPaths.isNotEmpty()) {
+            draft.photoPaths
+        } else if (!draft.photoPath.isNullOrEmpty()) {
+            listOf(draft.photoPath!!)
+        } else {
+            emptyList()
+        }
+
+        val primaryPhoto = preservedPhotoPaths.firstOrNull { it.isNotEmpty() } ?: draft.photoPath
 
         val savedPole = draft.copy(
             capturedTimestamp = now,
             timestamp = now,
             syncStatus = "PENDING",
-            photoPaths = if (!draft.photoPath.isNullOrEmpty()) listOf(draft.photoPath!!) else draft.photoPaths,
+            photoPath = primaryPhoto,
+            photoPaths = preservedPhotoPaths,
             status = calculatedStatus
         ).withCalculatedStatus()
 
@@ -863,6 +982,313 @@ class InventoryRepository(private val context: Context) {
     }
 
     fun deletePoleById(poleId: String) = deletePole(poleId)
+
+    /**
+     * Memproses dan mengimpor Peta Aset Alpaca PRA (Rute + Tiang Eksisting) ke SQLite Room.
+     * Bersifat universal dan data-driven untuk segmen manapun di semua Area ID.
+     */
+    suspend fun importSegmentAssetMap(
+        mapData: AlpacaMapResponseDto,
+        customSegmentId: String? = null
+    ): Int = withContext(Dispatchers.IO) {
+        val ift = mapData.ift
+        val targetPoId = ift?.poId?.takeIf { it.isNotBlank() }
+        val allSegments = dao.getAllSegmentsSync()
+
+        // Cari segmen yang cocok berdasarkan ID atau PO ID atau Nama
+        val matchedSegment = allSegments.find { seg ->
+            (customSegmentId != null && (seg.id == customSegmentId || seg.id == "SEG-$customSegmentId")) ||
+            (targetPoId != null && (seg.poId == targetPoId || seg.poId == "PO-$targetPoId" || seg.poId == "PO-MPO-$targetPoId" || seg.id == "SEG-$targetPoId")) ||
+            (ift?.poName?.isNotBlank() == true && seg.name.contains(ift.poName, ignoreCase = true))
+        }
+
+        val effectiveSegmentId = matchedSegment?.id 
+            ?: customSegmentId 
+            ?: (if (targetPoId != null) "SEG-$targetPoId" else "SEG-${UUID.randomUUID().toString().take(6)}")
+
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+
+        // Jika rute pada segmen belum ada atau kosong, perbarui dengan geometri dari IFT
+        val iftCoordinates: List<RouteCoordinate> = ift?.geometry?.toFlatRouteCoordinates() ?: emptyList()
+        if (matchedSegment != null) {
+            if (matchedSegment.routeCoordinates.isEmpty() && iftCoordinates.isNotEmpty()) {
+                val updatedSegment = matchedSegment.copy(
+                    routeCoordinates = iftCoordinates,
+                    lengthMeters = if (matchedSegment.lengthMeters <= 0.0) (ift?.lengthPo ?: 0.0) else matchedSegment.lengthMeters,
+                    updatedAt = now
+                )
+                dao.insertSegment(updatedSegment)
+            }
+        } else if (ift != null) {
+            // Buat segmen baru jika belum ada di database
+            val cityCode = ift.poName.take(3).uppercase().ifBlank { "MPO" }
+            val newSegment = SegmentEntity(
+                id = effectiveSegmentId,
+                name = ift.poName.ifBlank { "Segmen PO $targetPoId" },
+                lengthMeters = ift.lengthPo,
+                routeCoordinates = iftCoordinates,
+                areaId = 18,
+                orgSite = ift.poName,
+                dstSite = ift.poName,
+                orgCity = ift.poName,
+                dstCity = ift.poName,
+                cityFilterKey = determineCityFilterKey(ift.poName, null, null),
+                isAlpacaProject = true,
+                priorityRouteKey = determinePriorityRouteKey(ift.poName, null, null),
+                poId = targetPoId ?: effectiveSegmentId.removePrefix("SEG-"),
+                route = ift.poName,
+                description = "Segmen Fiber Optic PRA ${ift.poName}",
+                startPoint = if (iftCoordinates.isNotEmpty()) Pair(iftCoordinates.first().latitude, iftCoordinates.first().longitude) else Pair(0.0, 0.0),
+                endPoint = if (iftCoordinates.isNotEmpty()) Pair(iftCoordinates.last().latitude, iftCoordinates.last().longitude) else Pair(0.0, 0.0),
+                status = SegmentStatus.NOT_STARTED,
+                totalPoles = 0,
+                completedPoles = 0,
+                conflictPoles = 0,
+                isPinned = false,
+                cityCode = cityCode,
+                locationCode = cityCode,
+                currentSequence = 0,
+                createdAt = now,
+                updatedAt = now
+            )
+            dao.insertSegment(newSegment)
+        }
+
+        // Ambil tiang-tiang yang sudah ada di Room untuk segmen ini guna proteksi hasil survei surveyor
+        val existingPolesInDb = dao.getPolesBySegmentSync(effectiveSegmentId).associateBy { it.id }
+
+        var importedCount = 0
+        val polesToInsert = mutableListOf<PoleEntity>()
+
+        mapData.assets.forEachIndexed { index, asset ->
+            val lat = asset.latitude
+            val lng = asset.longitude
+            if (lat == 0.0 && lng == 0.0) return@forEachIndexed
+
+            val poleId = asset.assetUid.ifBlank { "POL-${effectiveSegmentId}-${String.format(Locale.US, "%04d", index + 1)}" }
+            val existing = existingPolesInDb[poleId]
+
+            // Jika tiang ini sudah disurvei/diisi foto oleh surveyor lapangan, JANGAN overwrite hasil survei!
+            if (existing != null && existing.status == TagStatus.COMPLETED) {
+                return@forEachIndexed
+            }
+
+            val derivedHeight = if (asset.assetClass?.contains("7") == true) "7m" else "9m"
+            val derivedClass = asset.assetClass?.lowercase() ?: if (derivedHeight == "7m") "pole_7" else "pole_9"
+            val equipmentList = parseEquipmentFromFeature(asset.featureName)
+            val parsedSequence = extractPoleNumber(asset.featureName) ?: (index + 1)
+
+            val poleEntity = PoleEntity(
+                id = poleId,
+                segmentId = effectiveSegmentId,
+                tagNumber = asset.featureName ?: "Tiang $parsedSequence",
+                latitude = lat,
+                longitude = lng,
+                originalLatitude = lat,
+                originalLongitude = lng,
+                rawLatitude = lat,
+                rawLongitude = lng,
+                accuracy = 1.0f,
+                type = PoleType.STEEL,
+                condition = PoleCondition.GOOD,
+                ownership = PoleOwnership.LINTASARTA,
+                height = derivedHeight,
+                hasFoCable = true,
+                cableCondition = CableCondition.GOOD,
+                equipment = equipmentList.toSet(),
+                photoPath = existing?.photoPath,
+                photoSha256 = existing?.photoSha256,
+                photoPaths = existing?.photoPaths ?: emptyList(),
+                status = existing?.status ?: TagStatus.NOT_TAGGED,
+                timestamp = existing?.timestamp ?: now,
+                capturedTimestamp = existing?.capturedTimestamp ?: "",
+                isLocationLocked = true,
+                isExistingPole = true,
+                syncStatus = existing?.syncStatus ?: "PENDING",
+                notes = if (asset.sourceProximity?.isNotBlank() == true) "Proximity: ${asset.sourceProximity}" else "",
+                assetClass = derivedClass,
+                assetType = asset.assetType ?: "pole",
+                matchStatus = asset.matchStatus?.uppercase() ?: "MATCHED",
+                sequence = parsedSequence,
+                missingReason = existing?.missingReason
+            ).withCalculatedStatus()
+
+            polesToInsert.add(poleEntity)
+            importedCount++
+        }
+
+        if (polesToInsert.isNotEmpty()) {
+            dao.insertPoles(polesToInsert)
+        }
+
+        recalculateProjectStats()
+        return@withContext importedCount
+    }
+
+    fun parseEquipmentFromFeature(featureName: String?): List<String> {
+        if (featureName.isNullOrBlank()) return emptyList()
+        val lower = featureName.lowercase(Locale.ROOT)
+        val list = mutableListOf<String>()
+        if (lower.contains("slekan") || lower.contains("slk")) list.add("Slekan FO")
+        if (lower.contains("jb") || lower.contains("closure") || lower.contains("joint")) list.add("Joint Closure (JB)")
+        if (lower.contains("sp") || lower.contains("slack")) list.add("Slack Point (SP)")
+        if (lower.contains("panel") || lower.contains("box") || lower.contains("otb")) list.add("Box Panel OTB")
+        if (lower.contains("cross arm") || lower.contains("crossarm")) list.add("Cross Arm")
+        return list
+    }
+
+    fun extractPoleNumber(featureName: String?): Int? {
+        if (featureName.isNullOrBlank()) return null
+        val match = Regex("\\d+").find(featureName)
+        return match?.value?.toIntOrNull()
+    }
+
+    /**
+     * Menarik tiang eksisting dari server untuk sebuah segmen tertentu secara on-demand.
+     * Jika server tidak mengembalikan tiang (misal luar cakupan PRA seperti Ambon, Saumlaki, Tual),
+     * segmen tetap tersimpan dengan 0 tiang, siap untuk tagging awal mandiri.
+     */
+    suspend fun pullPolesForSegment(
+        baseUrl: String,
+        segmentId: String,
+        poId: String? = null
+    ): Result<Int> = withContext(Dispatchers.IO) {
+        try {
+            val seg = dao.getSegmentById(segmentId)
+            val effectivePoId = poId 
+                ?: seg?.poId?.takeIf { it.isNotBlank() } 
+                ?: segmentId.removePrefix("SEG-")
+
+            val mapResult = RnimsApiClient.fetchSegmentAssetMap(baseUrl, effectivePoId)
+            if (mapResult.isSuccess) {
+                val mapData = mapResult.getOrThrow()
+                val count = importSegmentAssetMap(mapData, segmentId)
+                Result.success(count)
+            } else {
+                Result.failure(mapResult.exceptionOrNull() ?: Exception("Gagal menarik data aset untuk PO ID $effectivePoId"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Menandai tiang eksisting sebagai NIHIL / MISSING di lapangan.
+     * Data tiang TIDAK dihapus dari database agar audit trail rekonsiliasi tetap utuh.
+     */
+    fun markPoleAsMissing(poleId: String, reason: String? = null) {
+        val current = _poles.value[poleId] ?: return
+        val updated = current.copy(
+            matchStatus = "MISSING",
+            status = TagStatus.MISSING,
+            missingReason = reason ?: "Nihil Lapangan / Tidak Ditemukan"
+        )
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[poleId] = updated
+        _poles.value = updatedMap
+
+        if (_currentDraftPole.value?.id == poleId) {
+            _currentDraftPole.value = updated
+        }
+
+        scope.launch {
+            dao.updatePoleMissing(poleId, reason ?: "Nihil Lapangan / Tidak Ditemukan")
+            recalculateProjectStats()
+        }
+    }
+
+    /**
+     * Memulihkan tiang yang sebelumnya ditandai NIHIL / MISSING kembali ke status semula.
+     */
+    fun restoreMissingPole(poleId: String) {
+        val current = _poles.value[poleId] ?: return
+        val updated = current.copy(
+            matchStatus = if (current.isExistingPole) "MATCHED" else "PROVISIONAL",
+            status = TagStatus.NOT_TAGGED,
+            missingReason = null
+        ).withCalculatedStatus()
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[poleId] = updated
+        _poles.value = updatedMap
+
+        if (_currentDraftPole.value?.id == poleId) {
+            _currentDraftPole.value = updated
+        }
+
+        scope.launch {
+            dao.insertPole(updated)
+            recalculateProjectStats()
+        }
+    }
+
+    /**
+     * Menambahkan tiang baru mandiri (Provisional Pole) di lapangan pada segmen mana pun.
+     * Digunakan baik untuk segmen tanpa tiang eksisting (Ambon, Saumlaki, Tual)
+     * maupun segmen PRA yang memiliki tiang tambahan baru di lapangan.
+     */
+    fun addProvisionalPole(
+        segmentId: String,
+        latitude: Double,
+        longitude: Double,
+        assetClass: String = "pole_9",
+        cityCode: String = "MPO"
+    ): PoleEntity {
+        val now = SimpleDateFormat("dd MMM yyyy — HH:mm", Locale.US).format(Date())
+        val existingPolesInSeg = _poles.value.values.filter { 
+            it.segmentId == segmentId || it.segmentId.removePrefix("SEG-") == segmentId.removePrefix("SEG-") 
+        }
+        val nextSeq = (existingPolesInSeg.maxOfOrNull { it.sequence } ?: 0) + 1
+        val poleUid = "POL-$cityCode-${String.format(Locale.US, "%04d", nextSeq)}"
+
+        val derivedHeight = if (assetClass == "pole_7") "7m" else "9m"
+
+        val newPole = PoleEntity(
+            id = poleUid,
+            segmentId = segmentId,
+            tagNumber = "Tiang $nextSeq",
+            latitude = latitude,
+            longitude = longitude,
+            originalLatitude = latitude,
+            originalLongitude = longitude,
+            rawLatitude = latitude,
+            rawLongitude = longitude,
+            accuracy = 2.0f,
+            type = PoleType.STEEL,
+            condition = PoleCondition.GOOD,
+            ownership = PoleOwnership.LINTASARTA,
+            height = derivedHeight,
+            hasFoCable = true,
+            cableCondition = CableCondition.GOOD,
+            equipment = emptySet(),
+            photoPath = null,
+            photoSha256 = null,
+            photoPaths = emptyList(),
+            status = TagStatus.NOT_TAGGED,
+            timestamp = now,
+            capturedTimestamp = "",
+            isLocationLocked = false,
+            isExistingPole = false,
+            syncStatus = "PENDING",
+            notes = "Tiang Baru Lapangan (Provisional)",
+            assetClass = assetClass,
+            assetType = "pole",
+            matchStatus = "PROVISIONAL",
+            sequence = nextSeq
+        ).withCalculatedStatus()
+
+        val updatedMap = _poles.value.toMutableMap()
+        updatedMap[newPole.id] = newPole
+        _poles.value = updatedMap
+        _targetPoleId.value = newPole.id
+        _currentDraftPole.value = newPole
+
+        scope.launch {
+            dao.insertPole(newPole)
+            recalculateProjectStats()
+        }
+
+        return newPole
+    }
 
     fun addExportFile(file: ExportFile) {
         scope.launch {

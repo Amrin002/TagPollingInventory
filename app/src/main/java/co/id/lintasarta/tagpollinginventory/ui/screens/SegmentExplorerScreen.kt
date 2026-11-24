@@ -777,17 +777,27 @@ fun SegmentExplorerCard(
                         )
                     }
 
-                    // Tiang Selesai
+                    // Tiang Selesai & Total Tiang Referensi Server
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val iconTint = when {
+                            segment.completedPoles > 0 && segment.completedPoles >= segment.totalPoles -> Color(0xFF2E7D32)
+                            segment.completedPoles > 0 -> Color(0xFF1976D2)
+                            segment.totalPoles > 0 -> Color(0xFFF57C00)
+                            else -> Color.Gray
+                        }
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
-                            tint = if (segment.completedPoles > 0) Color(0xFF2E7D32) else Color.Gray,
+                            tint = iconTint,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${segment.completedPoles} tiang",
+                            text = if (segment.totalPoles > 0) {
+                                "${segment.completedPoles} / ${segment.totalPoles} tiang"
+                            } else {
+                                "${segment.completedPoles} tiang"
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF37474F)

@@ -172,6 +172,7 @@ fun TagStatusBadge(status: TagStatus) {
         TagStatus.COMPLETED -> Triple(StatusCompleted, StatusCompletedContainer, "Selesai")
         TagStatus.CONFLICT -> Triple(StatusConflict, StatusConflictContainer, "Konflik")
         TagStatus.NOT_TAGGED -> Triple(StatusNotTagged, StatusNotTaggedContainer, "Belum Ditag")
+        TagStatus.MISSING -> Triple(androidx.compose.ui.graphics.Color(0xFF5A5A5A), androidx.compose.ui.graphics.Color(0xFFE0E0E0), "Nihil / Missing")
     }
 
     Surface(
@@ -416,6 +417,7 @@ fun FieldMapCanvas(
                     TagStatus.COMPLETED -> StatusCompleted
                     TagStatus.CONFLICT -> StatusConflict
                     TagStatus.NOT_TAGGED -> StatusNotTagged
+                    TagStatus.MISSING -> androidx.compose.ui.graphics.Color(0xFF757575)
                 }
 
                 if (isSelected) {

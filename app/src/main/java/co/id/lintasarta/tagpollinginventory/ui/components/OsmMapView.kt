@@ -173,6 +173,7 @@ fun OsmMapView(
                         TagStatus.COMPLETED -> AndroidColor.parseColor("#2E7D32")
                         TagStatus.CONFLICT -> AndroidColor.parseColor("#C62828")
                         TagStatus.NOT_TAGGED -> AndroidColor.parseColor("#757575")
+                        TagStatus.MISSING -> AndroidColor.parseColor("#424242")
                     }
 
                     val shape = GradientDrawable().apply {

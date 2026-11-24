@@ -67,6 +67,7 @@ fun PoleInformationScreen(
         TagStatus.COMPLETED -> Pair(Color(0xFF2E7D32), Color(0xFFE8F5E9))
         TagStatus.CONFLICT -> Pair(Color(0xFFC62828), Color(0xFFFFEBEE))
         TagStatus.NOT_TAGGED -> Pair(TelecomPrimary, Color(0xFFE3F2FD))
+        TagStatus.MISSING -> Pair(Color(0xFF5A5A5A), Color(0xFFE0E0E0))
     }
 
     Scaffold(

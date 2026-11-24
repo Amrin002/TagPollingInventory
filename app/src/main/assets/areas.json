@@ -1,0 +1,122 @@
+[
+  {
+    "areaId": 1,
+    "code": "ADMIN",
+    "name": "ADMIN"
+  },
+  {
+    "areaId": 2,
+    "code": "SEOA",
+    "name": "SOUTH&EAST OUTER AREA"
+  },
+  {
+    "areaId": 3,
+    "code": "BDA",
+    "name": "BUSSINES DISTRICT AREA"
+  },
+  {
+    "areaId": 4,
+    "code": "SAST",
+    "name": "SOUTH AREA & SOUTH TANGERANG AREA"
+  },
+  {
+    "areaId": 5,
+    "code": "CDA",
+    "name": "CENTRAL DISTRICT AREA"
+  },
+  {
+    "areaId": 6,
+    "code": "NEA",
+    "name": "NORTH & EAST AREA"
+  },
+  {
+    "areaId": 7,
+    "code": "BWA",
+    "name": "BANTEN & WEST AREA"
+  },
+  {
+    "areaId": 8,
+    "code": "NSO",
+    "name": "NORTH SUMATRA OPERATION"
+  },
+  {
+    "areaId": 9,
+    "code": "CSO",
+    "name": "CENTRAL SUMATRA OPERATION"
+  },
+  {
+    "areaId": 10,
+    "code": "SSO",
+    "name": "SOUTH SUMATRA OPERATION"
+  },
+  {
+    "areaId": 11,
+    "code": "CJDO",
+    "name": "CENTRAL JAVA & DIY OPERATION"
+  },
+  {
+    "areaId": 12,
+    "code": "WJO",
+    "name": "WEST JAVA OPERATION"
+  },
+  {
+    "areaId": 13,
+    "code": "EKO",
+    "name": "EAST KALIMANTAN OPERATION"
+  },
+  {
+    "areaId": 14,
+    "code": "WKO",
+    "name": "WEST KALIMANTAN OPERATION"
+  },
+  {
+    "areaId": 15,
+    "code": "EJO",
+    "name": "EAST JAVA OPERATION"
+  },
+  {
+    "areaId": 16,
+    "code": "BNO",
+    "name": "BALI NUSRA OPERATION"
+  },
+  {
+    "areaId": 17,
+    "code": "SMUO",
+    "name": "SULAWESI MALUKU UTARA OPERATION"
+  },
+  {
+    "areaId": 18,
+    "code": "MPO",
+    "name": "MALUKU PAPUA OPERATION"
+  },
+  {
+    "areaId": 19,
+    "code": "ALL_ERO",
+    "name": "ALL"
+  },
+  {
+    "areaId": 20,
+    "code": "ALL_WRO",
+    "name": "ALL"
+  },
+  {
+    "areaId": 21,
+    "code": "ALL_CRO",
+    "name": "ALL"
+  },
+  {
+    "areaId": 22,
+    "code": "ALL_RO",
+    "name": "ALL_AREA"
+  },
+  {
+    "areaId": 23,
+    "code": "ALL_DNA",
+    "name": "ALL"
+  },
+  {
+    "areaId": 24,
+    "code": "ALL_DSA",
+    "name": "ALL"
+  }
+]

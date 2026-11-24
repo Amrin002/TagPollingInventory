@@ -20,7 +20,7 @@ class ExportEngine(private val context: Context) {
     fun generateAlpacaMasterCsv(poles: List<Pole>, targetFile: File? = null): File {
         val file = targetFile ?: File(exportDir, "Alpaca_Master_Poles.csv")
         val sb = StringBuilder()
-        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,sync_status,timestamp,photo_sha256\n")
+        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,missing_reason,is_existing_pole,sync_status,timestamp,photo_sha256\n")
 
         for (pole in poles) {
             val photoFileName = if (!pole.photoPath.isNullOrEmpty()) {
@@ -47,6 +47,8 @@ class ExportEngine(private val context: Context) {
             sb.append("\"${pole.condition.displayName}\",")
             sb.append("${pole.isSafetyDeferred},")
             sb.append("\"${pole.matchStatus}\",")
+            sb.append("\"${pole.missingReason ?: ""}\",")
+            sb.append("${pole.isExistingPole},")
             sb.append("\"${pole.syncStatus}\",")
             sb.append("\"${pole.capturedTimestamp}\",")
             sb.append("\"${pole.photoSha256 ?: ""}\"\n")
@@ -141,6 +143,14 @@ class ExportEngine(private val context: Context) {
         sb.append("      </IconStyle>\n")
         sb.append("    </Style>\n")
 
+        sb.append("    <Style id=\"missingPole\">\n")
+        sb.append("      <IconStyle>\n")
+        sb.append("        <color>ff757575</color>\n") // Dark Gray
+        sb.append("        <scale>0.9</scale>\n")
+        sb.append("        <Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon>\n")
+        sb.append("      </IconStyle>\n")
+        sb.append("    </Style>\n\n")
+
         sb.append("    <Style id=\"fiberRouteLine\">\n")
         sb.append("      <LineStyle>\n")
         sb.append("        <color>ffc06515</color>\n") // Telecom Blue
@@ -166,6 +176,7 @@ class ExportEngine(private val context: Context) {
         // 2. Placemarks Tiang Alpaca PRA
         for (pole in poles) {
             val styleUrl = when {
+                pole.status == TagStatus.MISSING || pole.matchStatus == "MISSING" -> "#missingPole"
                 pole.isSafetyDeferred -> "#safetyDeferredPole"
                 pole.assetClass == "pole_7" -> "#p7Pole"
                 else -> "#p9Pole"
@@ -192,6 +203,9 @@ class ExportEngine(private val context: Context) {
             }
             sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Kepemilikan</b></td><td>${pole.ownership.displayName}</td></tr>\n")
             sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Kondisi</b></td><td>${pole.condition.displayName}</td></tr>\n")
+            if (pole.status == TagStatus.MISSING || pole.matchStatus == "MISSING") {
+                sb.append("            <tr><td style=\"background:#ECEFF1; color:#37474F;\"><b>Status Lapangan</b></td><td style=\"color:#C62828;\"><b>NIHIL / TIDAK DITEMUKAN</b> (${escapeXml(pole.missingReason ?: "Nihil")})</td></tr>\n")
+            }
             if (pole.isSafetyDeferred) {
                 sb.append("            <tr><td style=\"background:#FFEBEE; color:#C62828;\"><b>Safety Deferral</b></td><td style=\"color:#C62828;\">${pole.safetyDeferralReason ?: "Terhalang"}</td></tr>\n")
             }
@@ -218,6 +232,8 @@ class ExportEngine(private val context: Context) {
             sb.append("        <Data name=\"accuracy\"><value>${pole.accuracy}</value></Data>\n")
             sb.append("        <Data name=\"is_safety_deferred\"><value>${pole.isSafetyDeferred}</value></Data>\n")
             sb.append("        <Data name=\"match_status\"><value>${escapeXml(pole.matchStatus)}</value></Data>\n")
+            sb.append("        <Data name=\"missing_reason\"><value>${escapeXml(pole.missingReason ?: "")}</value></Data>\n")
+            sb.append("        <Data name=\"is_existing_pole\"><value>${pole.isExistingPole}</value></Data>\n")
             sb.append("        <Data name=\"sync_status\"><value>${escapeXml(pole.syncStatus)}</value></Data>\n")
             sb.append("      </ExtendedData>\n")
 
@@ -246,7 +262,8 @@ class ExportEngine(private val context: Context) {
         val filteredPoles = poles.filter { pole ->
             (options.includeCompleted && pole.status == TagStatus.COMPLETED) ||
                     (options.includeConflict && pole.status == TagStatus.CONFLICT) ||
-                    (options.includeIncomplete && pole.status == TagStatus.NOT_TAGGED)
+                    (options.includeIncomplete && pole.status == TagStatus.NOT_TAGGED) ||
+                    ((options.includeIncomplete || options.includeConflict) && pole.status == TagStatus.MISSING)
         }
 
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HHmm", Locale.US).format(Date())

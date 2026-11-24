@@ -46,6 +46,7 @@ fun PoleInventoryListScreen(
                 "COMPLETED" -> pole.status == TagStatus.COMPLETED
                 "CONFLICT" -> pole.status == TagStatus.CONFLICT
                 "NOT_TAGGED" -> pole.status == TagStatus.NOT_TAGGED
+                "MISSING" -> pole.status == TagStatus.MISSING
                 else -> true
             }
 

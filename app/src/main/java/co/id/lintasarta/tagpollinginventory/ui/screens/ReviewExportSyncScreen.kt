@@ -1,8 +1,10 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -22,12 +24,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import co.id.lintasarta.tagpollinginventory.data.model.ExportFormat
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
 import co.id.lintasarta.tagpollinginventory.export.ExportEngine
+import co.id.lintasarta.tagpollinginventory.network.GDriveUploadResponse
 import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
@@ -83,6 +87,12 @@ fun ReviewExportSyncScreen(
     // Export Result Dialog State
     var exportedFileResult by remember { mutableStateOf<File?>(null) }
     var isExportingLocal by remember { mutableStateOf(false) }
+
+    // Google Drive Sync State
+    val isUploadingGDrive by viewModel.isUploadingGDrive.collectAsState()
+    val gdriveUploadMessage by viewModel.gdriveUploadMessage.collectAsState()
+    var gdriveUploadResultDialog by remember { mutableStateOf<GDriveUploadResponse?>(null) }
+    var gdriveUploadErrorDialog by remember { mutableStateOf<String?>(null) }
 
     val filteredPoles = remember(allPoles, selectedFilterSegment, selectedFilterStatus) {
         allPoles.filter { pole ->
@@ -314,6 +324,60 @@ fun ReviewExportSyncScreen(
                             color = Color(0xFF37474F)
                         )
 
+                        // TOMBOL UTAMA: KIRIM KE GOOGLE DRIVE (OTOMATIS MASUK FOLDER BY AREA ID)
+                        Button(
+                            onClick = {
+                                if (allPoles.isEmpty()) {
+                                    Toast.makeText(context, "Belum ada tiang yang disurvei untuk dikirim.", Toast.LENGTH_SHORT).show()
+                                    return@Button
+                                }
+                                viewModel.uploadSurveyToGoogleDrive { success, resp, msg ->
+                                    if (success && resp != null) {
+                                        gdriveUploadResultDialog = resp
+                                    } else {
+                                        gdriveUploadErrorDialog = msg
+                                    }
+                                }
+                            },
+                            enabled = !isUploadingGDrive && !isExportingLocal,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            if (isUploadingGDrive) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = gdriveUploadMessage ?: "Mengunggah KMZ ke Google Drive...",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            } else {
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(22.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = "Kirim ke Google Drive (Area ${currentUser.areaId} - ${currentUser.areaLabel})",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 13.sp
+                                    )
+                                    Text(
+                                        text = "Otomatis diarsipkan format KMZ ke folder Area_${currentUser.areaId}_${currentUser.areaLabel}",
+                                        fontSize = 10.sp,
+                                        color = Color.White.copy(alpha = 0.85f)
+                                    )
+                                }
+                            }
+                        }
+
                         // TOMBOL 1: EXPORT ALPACA MASTER CSV (Alpaca_Master_Poles.csv)
                         Button(
                             onClick = {
@@ -515,6 +579,106 @@ fun ReviewExportSyncScreen(
                 }
             }
         }
+    }
+
+    // DIALOG HASIL UPLOAD GOOGLE DRIVE
+    if (gdriveUploadResultDialog != null) {
+        val result = gdriveUploadResultDialog!!
+        AlertDialog(
+            onDismissRequest = { gdriveUploadResultDialog = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CloudDone,
+                    contentDescription = null,
+                    tint = Color(0xFF1B5E20),
+                    modifier = Modifier.size(40.dp)
+                )
+            },
+            title = {
+                Text(text = "Tersimpan di Google Drive!", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "File survei KMZ berhasil dikirim dan diarsipkan otomatis ke Google Drive.",
+                        fontSize = 13.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFE8F5E9),
+                        border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Folder: ${result.folder_name ?: "Area_${currentUser.areaId}_${currentUser.areaLabel}"}",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color(0xFF2E7D32)
+                            )
+                            Text(
+                                text = "File: ${result.file_name ?: ""}",
+                                fontSize = 11.sp,
+                                color = Color(0xFF1B5E20)
+                            )
+                            Text(
+                                text = "Root: TAGPOLLING_INVENTORY_RNIMS",
+                                fontSize = 10.sp,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                if (!result.file_url.isNullOrBlank()) {
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.file_url))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                Toast.makeText(context, "Tidak ada browser untuk membuka link", Toast.LENGTH_SHORT).show()
+                            }
+                            gdriveUploadResultDialog = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
+                    ) {
+                        Text("Buka di Google Drive")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { gdriveUploadResultDialog = null }) {
+                    Text("Tutup")
+                }
+            }
+        )
+    }
+
+    if (gdriveUploadErrorDialog != null) {
+        AlertDialog(
+            onDismissRequest = { gdriveUploadErrorDialog = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.ErrorOutline,
+                    contentDescription = null,
+                    tint = Color(0xFFC62828),
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(text = "Gagal Kirim ke Google Drive", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(text = gdriveUploadErrorDialog ?: "Terjadi kendala koneksi internet.")
+            },
+            confirmButton = {
+                Button(onClick = { gdriveUploadErrorDialog = null }) {
+                    Text("Mengerti")
+                }
+            }
+        )
     }
 
     // DIALOG HASIL EKSPOR FILE

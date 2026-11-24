@@ -84,6 +84,7 @@ dependencies {
     ksp(libs.room.compiler)
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation(libs.androidx.security.crypto)
     
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

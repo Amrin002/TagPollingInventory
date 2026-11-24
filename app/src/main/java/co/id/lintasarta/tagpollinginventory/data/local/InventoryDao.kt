@@ -21,6 +21,15 @@ interface InventoryDao {
     @Query("SELECT * FROM segments ORDER BY isPinned DESC, id ASC")
     fun getAllSegmentsFlow(): Flow<List<SegmentEntity>>
 
+    @Query("SELECT * FROM segments WHERE areaId = :areaId ORDER BY isPinned DESC, id ASC")
+    fun getSegmentsByAreaFlow(areaId: Int): Flow<List<SegmentEntity>>
+
+    @Query("SELECT * FROM segments WHERE areaId = :areaId ORDER BY isPinned DESC, id ASC")
+    fun getSegmentsByAreaSync(areaId: Int): List<SegmentEntity>
+
+    @Query("SELECT DISTINCT areaId FROM segments ORDER BY areaId ASC")
+    fun getDistinctAreaIdsSync(): List<Int>
+
     @Query("SELECT * FROM segments WHERE id = :id LIMIT 1")
     suspend fun getSegmentById(id: String): SegmentEntity?
 
@@ -87,6 +96,18 @@ interface InventoryDao {
 
     @Query("UPDATE poles SET syncStatus = :syncStatus WHERE id = :id")
     suspend fun updatePoleSyncStatus(id: String, syncStatus: String)
+
+    @Query("UPDATE poles SET matchStatus = 'MISSING', status = 'MISSING', missingReason = :reason WHERE id = :poleId")
+    suspend fun updatePoleMissing(poleId: String, reason: String? = null)
+
+    @Query("SELECT COUNT(*) FROM poles WHERE segmentId = :segmentId")
+    suspend fun countPolesInSegment(segmentId: String): Int
+
+    @Query("SELECT COUNT(*) FROM poles WHERE segmentId = :segmentId AND isExistingPole = 1")
+    suspend fun countExistingPolesInSegment(segmentId: String): Int
+
+    @Query("SELECT COUNT(*) FROM poles WHERE segmentId = :segmentId AND matchStatus = 'MISSING'")
+    suspend fun countMissingPolesInSegment(segmentId: String): Int
 
     @Query("DELETE FROM poles WHERE segmentId IN (:segmentIds)")
     suspend fun deletePolesBySegmentIds(segmentIds: List<String>)

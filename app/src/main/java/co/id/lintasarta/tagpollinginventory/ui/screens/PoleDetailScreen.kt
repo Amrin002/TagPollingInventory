@@ -288,6 +288,7 @@ fun PoleDetailScreen(
                                 text = when (currentPole.status) {
                                     TagStatus.COMPLETED -> "TERDATA"
                                     TagStatus.CONFLICT -> "SAFETY RISK"
+                                    TagStatus.MISSING -> "NIHIL"
                                     else -> "BELUM DITAG"
                                 },
                                 color = Color.White,

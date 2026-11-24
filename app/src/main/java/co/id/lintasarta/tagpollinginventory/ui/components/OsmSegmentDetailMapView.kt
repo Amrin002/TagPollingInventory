@@ -394,6 +394,7 @@ private fun createPoleBadgeDrawable(
         TagStatus.COMPLETED -> AndroidColor.parseColor("#2E7D32") // Hijau Selesai
         TagStatus.CONFLICT -> AndroidColor.parseColor("#C62828")  // Merah Konflik / Safety Deferral
         TagStatus.NOT_TAGGED -> AndroidColor.parseColor("#0288D1") // Biru Belum Tagging / Baru
+        TagStatus.MISSING -> AndroidColor.parseColor("#616161")    // Abu-abu Gelap Nihil / Missing
     }
     paint.color = bgColor
     paint.style = Paint.Style.FILL

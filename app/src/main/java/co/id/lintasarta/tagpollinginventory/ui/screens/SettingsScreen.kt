@@ -1,6 +1,7 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import co.id.lintasarta.tagpollinginventory.data.auth.UserSession
 import co.id.lintasarta.tagpollinginventory.data.model.Project
 import co.id.lintasarta.tagpollinginventory.location.LocationData
+import co.id.lintasarta.tagpollinginventory.network.AreaDto
 import co.id.lintasarta.tagpollinginventory.network.ConnectionTestResult
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
 import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
@@ -55,6 +57,7 @@ fun SettingsScreen(
     val currentUser by viewModel.currentUser.collectAsState()
     val isSyncingPoles by viewModel.isSyncingPoles.collectAsState()
     val syncPolesMessage by viewModel.syncPolesMessage.collectAsState()
+    val gdriveWebhookUrl by viewModel.gdriveWebhookUrl.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.updateMapCacheSize()
@@ -75,12 +78,16 @@ fun SettingsScreen(
         isSyncingRnims = isSyncingRnims,
         rnimsSyncMessage = rnimsSyncMessage,
         currentUser = currentUser,
+        availableAreas = viewModel.availableAreas,
+        gdriveWebhookUrl = gdriveWebhookUrl,
         isSyncingPoles = isSyncingPoles,
         syncPolesMessage = syncPolesMessage,
         onUpdateBaseUrl = { viewModel.setRnimsBaseUrl(it) },
         onTestConnection = { viewModel.testRnimsConnection() },
         onSyncMpoSegments = { viewModel.syncMpoSegmentsFromServer() },
         onSyncPoles = { viewModel.syncPolesToServer() },
+        onUpdateGDriveWebhookUrl = { viewModel.setGDriveWebhookUrl(it) },
+        onTestGDriveWebhook = { cb -> viewModel.testGDriveWebhook(cb) },
         onLoginRnims = { user, pass, cb -> viewModel.loginRnims(user, pass, cb) },
         onLoginOffline = { pin -> viewModel.loginOffline(pin) },
         onLogout = { viewModel.logout() },
@@ -94,6 +101,7 @@ fun SettingsScreen(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreenContent(
     project: Project,
@@ -110,12 +118,16 @@ fun SettingsScreenContent(
     isSyncingRnims: Boolean = false,
     rnimsSyncMessage: String? = null,
     currentUser: UserSession = UserSession(),
+    availableAreas: List<AreaDto> = emptyList(),
+    gdriveWebhookUrl: String = RnimsApiClient.DEFAULT_GDRIVE_WEBHOOK_URL,
     isSyncingPoles: Boolean = false,
     syncPolesMessage: String? = null,
     onUpdateBaseUrl: (String) -> Unit = {},
     onTestConnection: () -> Unit = {},
     onSyncMpoSegments: () -> Unit = {},
     onSyncPoles: () -> Unit = {},
+    onUpdateGDriveWebhookUrl: (String) -> Unit = {},
+    onTestGDriveWebhook: (((Boolean, String) -> Unit)) -> Unit = {},
     onLoginRnims: (String, String, (Boolean, String) -> Unit) -> Unit = { _, _, _ -> },
     onLoginOffline: (String) -> Unit = {},
     onLogout: () -> Unit = {},
@@ -271,68 +283,314 @@ fun SettingsScreenContent(
                     }
                 }
 
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFFF1F5F9),
-                    modifier = Modifier.fillMaxWidth()
+                // Pemilih Area Operasional (Dropdown Master Data 24 Area)
+                var isAreaDropdownExpanded by remember { mutableStateOf(false) }
+                val currentAreaObj = availableAreas.find { it.areaId == currentUser.areaId }
+                val areaDisplayName = currentAreaObj?.let { "Area ${it.areaId} - ${it.code} (${it.name})" }
+                    ?: "Area ${currentUser.areaId} - ${currentUser.areaLabel}"
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Area Operasional:", fontSize = 11.sp, color = Color.Gray)
+                        Text(
+                            text = "WILAYAH KERJA / AREA ID",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = TelecomPrimary
+                        )
+                        Text(
+                            text = "${availableAreas.size} Area Tersedia",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = isAreaDropdownExpanded,
+                        onExpandedChange = { isAreaDropdownExpanded = !isAreaDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = areaDisplayName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Pilih Wilayah Operasional") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isAreaDropdownExpanded) },
+                            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isAreaDropdownExpanded,
+                            onDismissRequest = { isAreaDropdownExpanded = false }
+                        ) {
+                            availableAreas.forEach { area ->
+                                val isSelected = area.areaId == currentUser.areaId
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "Area ${area.areaId} - ${area.code}",
+                                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                                                    color = if (isSelected) TelecomPrimary else Color.Unspecified
+                                                )
+                                                if (isSelected) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = TelecomPrimary.copy(alpha = 0.15f)
+                                                    ) {
+                                                        Text(
+                                                            text = "AKTIF",
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = TelecomPrimary,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            Text(
+                                                text = area.name,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.Gray
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        onUpdateArea(area.areaId, area.code)
+                                        isAreaDropdownExpanded = false
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Memilih area akan otomatis memfilter segmen pada Peta, Daftar Segmen, dan rute survei tanpa membutuhkan koneksi server kantor.",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        lineHeight = 15.sp
+                    )
+                }
+
+                // Banner Status Standalone Offline
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFF1F8E9),
+                    border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
                             Text(
-                                "Area ${currentUser.areaId} - ${currentUser.areaLabel}",
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TelecomPrimary
+                                text = "Mode Mandiri Offline Aktif",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = Color(0xFF1B5E20)
                             )
                             Text(
-                                "Sesuai profil akun yang login",
-                                fontSize = 10.sp,
-                                color = Color.Gray
+                                text = "Akses server kantor tertutup dari jaringan publik (intranet only). Otentikasi login/logout dinonaktifkan agar surveyor leluasa bekerja di lapangan.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF33691E),
+                                lineHeight = 14.sp
                             )
                         }
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = TelecomPrimary.copy(alpha = 0.12f)
+                    }
+                }
+            }
+        }
+
+        // 2b. Konfigurasi Google Drive Webhook Sync
+        var isEditingGDriveUrl by remember { mutableStateOf(false) }
+        var tempGDriveUrl by remember(gdriveWebhookUrl) { mutableStateOf(gdriveWebhookUrl) }
+        var isTestingGDrive by remember { mutableStateOf(false) }
+        var gdriveTestResultText by remember { mutableStateOf<String?>(null) }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = null,
+                            tint = Color(0xFF1B5E20),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "DESTINASI GOOGLE DRIVE (SYNC KMZ)",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1B5E20)
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFFE8F5E9)
+                    ) {
+                        Text(
+                            text = "Webhook Siap",
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF2E7D32)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "File survei KMZ akan otomatis diunggah dan disimpan ke folder:",
+                    fontSize = 12.sp,
+                    color = Color.DarkGray
+                )
+
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0xFFF1F8E9),
+                    border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            text = "📁 TAGPOLLING_INVENTORY_RNIMS / Area_${currentUser.areaId}_${currentUser.areaLabel}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color(0xFF1B5E20)
+                        )
+                        Text(
+                            text = "Penyimpanan otomatis tanpa memerlukan login Google di perangkat ini.",
+                            fontSize = 10.sp,
+                            color = Color(0xFF33691E)
+                        )
+                    }
+                }
+
+                if (isEditingGDriveUrl) {
+                    OutlinedTextField(
+                        value = tempGDriveUrl,
+                        onValueChange = { tempGDriveUrl = it },
+                        label = { Text("URL Google Apps Script Webhook") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = false,
+                        maxLines = 3,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = {
+                            tempGDriveUrl = gdriveWebhookUrl
+                            isEditingGDriveUrl = false
+                        }) {
+                            Text("Batal")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                onUpdateGDriveWebhookUrl(tempGDriveUrl)
+                                isEditingGDriveUrl = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
                         ) {
-                            Text(
-                                text = "AKUN PROFIL",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TelecomPrimary,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
+                            Text("Simpan URL")
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "URL: ${gdriveWebhookUrl.take(45)}...",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { isEditingGDriveUrl = true }) {
+                            Text("Ubah", fontSize = 11.sp)
                         }
                     }
                 }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
-                        onClick = { onNavigateToLogin() },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp)
+                        onClick = {
+                            isTestingGDrive = true
+                            gdriveTestResultText = "Memeriksa webhook..."
+                            onTestGDriveWebhook { ok, msg ->
+                                isTestingGDrive = false
+                                gdriveTestResultText = msg
+                            }
+                        },
+                        enabled = !isTestingGDrive,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.AccountCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Ganti Akun")
+                        if (isTestingGDrive) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(6.dp))
+                        } else {
+                            Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+                        Text("Uji Webhook GDrive", fontSize = 12.sp)
                     }
+                }
 
-                    TextButton(
-                        onClick = { onLogout() },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFC62828))
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Keluar")
-                    }
+                if (!gdriveTestResultText.isNullOrBlank()) {
+                    Text(
+                        text = gdriveTestResultText!!,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (gdriveTestResultText!!.contains("Online")) Color(0xFF2E7D32) else Color(0xFFC62828)
+                    )
                 }
             }
         }

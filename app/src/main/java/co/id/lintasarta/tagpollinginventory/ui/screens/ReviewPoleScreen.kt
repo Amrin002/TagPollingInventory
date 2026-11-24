@@ -5,6 +5,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Save
@@ -36,6 +41,7 @@ fun ReviewPoleScreen(
 ) {
     val draftPole by viewModel.currentDraftPole.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
+    var inspectingPhotoPath by remember { mutableStateOf<String?>(null) }
 
     val displayPoleCode = draftPole?.poleCode?.ifEmpty { draftPole?.id } ?: "Target Pole"
 
@@ -255,47 +261,58 @@ fun ReviewPoleScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
+                    val currentDraft = draftPole
+                    val validPhotos = remember(currentDraft?.photoPaths, currentDraft?.photoPath) {
+                        val fromPaths = currentDraft?.photoPaths?.filter { it.isNotBlank() && File(it).exists() } ?: emptyList()
+                        val singlePhoto = currentDraft?.photoPath
+                        if (fromPaths.isNotEmpty()) {
+                            fromPaths
+                        } else if (!singlePhoto.isNullOrBlank() && File(singlePhoto).exists()) {
+                            listOf(singlePhoto)
+                        } else {
+                            emptyList()
+                        }
+                    }
+                    val photoCount = validPhotos.size
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
+                            imageVector = if (photoCount > 0) Icons.Default.CheckCircle else Icons.Default.Warning,
                             contentDescription = null,
-                            tint = Color(0xFF2E7D32),
+                            tint = if (photoCount > 0) Color(0xFF2E7D32) else Color(0xFFEF6C00),
                             modifier = Modifier.size(28.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
-                            val photoCount = draftPole?.photoPaths?.size ?: 0
                             Text(
-                                text = "✓ $photoCount Foto Terlampir",
+                                text = if (photoCount > 0) "✓ $photoCount Foto Terlampir" else "Belum Ada Foto Terlampir",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF2E7D32)
+                                color = if (photoCount > 0) Color(0xFF2E7D32) else Color(0xFFEF6C00)
                             )
                         }
                     }
 
-                    val paths = draftPole?.photoPaths ?: emptyList()
-                    if (paths.isNotEmpty()) {
+                    if (validPhotos.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         LazyRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(paths) { path ->
+                            items(validPhotos) { path ->
                                 val file = File(path)
-                                if (file.exists()) {
-                                    AsyncImage(
-                                        model = file,
-                                        contentDescription = "Pratinjau Foto Tiang",
-                                        modifier = Modifier
-                                            .width(200.dp)
-                                            .height(180.dp)
-                                            .clip(RoundedCornerShape(8.dp)),
-                                        contentScale = ContentScale.Crop
-                                    )
-                                }
+                                AsyncImage(
+                                    model = file,
+                                    contentDescription = "Pratinjau Foto Tiang",
+                                    modifier = Modifier
+                                        .width(200.dp)
+                                        .height(180.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { inspectingPhotoPath = path },
+                                    contentScale = ContentScale.Crop
+                                )
                             }
                         }
                     }
@@ -327,6 +344,39 @@ fun ReviewPoleScreen(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
+            }
+        }
+    }
+
+    // Full Screen Inspection Dialog
+    if (inspectingPhotoPath != null) {
+        Dialog(
+            onDismissRequest = { inspectingPhotoPath = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black)
+            ) {
+                AsyncImage(
+                    model = File(inspectingPhotoPath!!),
+                    contentDescription = "Full Inspection",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit
+                )
+                IconButton(
+                    onClick = { inspectingPhotoPath = null },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = Color.White
+                    )
+                }
             }
         }
     }
