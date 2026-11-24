@@ -16,13 +16,16 @@ import java.util.Locale
 
 object UserLocationOverlayHelper {
 
+    private var cachedUserMarkerDrawable: Drawable? = null
+
     /**
-     * Membuat ikon penanda posisi GPS Surveyor modern ala Google Maps / GIS:
-     * - Lingkaran luar putih tebal (border)
-     * - Lingkaran dalam Electric Blue (#1A73E8)
-     * - Titik putih kecil di tengah sebagai poros koordinat presisi
+     * Membuat ikon penanda posisi GPS Surveyor modern ala Google Maps / GIS (di-cache untuk efisiensi memori)
      */
     fun createUserLocationMarkerDrawable(context: Context): Drawable {
+        if (cachedUserMarkerDrawable != null) {
+            return cachedUserMarkerDrawable!!
+        }
+
         val density = context.resources.displayMetrics.density
         val sizeDp = 38
         val sizePx = (sizeDp * density).toInt()
@@ -50,12 +53,14 @@ object UserLocationOverlayHelper {
         paint.color = AndroidColor.WHITE
         canvas.drawCircle(center, center, 3.5f * density, paint)
 
-        return BitmapDrawable(context.resources, bitmap)
+        val drawable = BitmapDrawable(context.resources, bitmap)
+        cachedUserMarkerDrawable = drawable
+        return drawable
     }
 
     /**
      * Memperbarui atau menambahkan overlay titik lokasi user dan lingkaran radius akurasi
-     * pada MapView OpenStreetMap.
+     * pada MapView OpenStreetMap secara ringan (tanpa alokasi ulang memori berlebih).
      */
     fun updateUserLocationOverlay(
         mapView: MapView,
@@ -66,6 +71,16 @@ object UserLocationOverlayHelper {
     ): Pair<Marker?, Polygon?> {
         if (userLocation != null && userLocation.isAvailable && userLocation.latitude != 0.0) {
             val userPoint = GeoPoint(userLocation.latitude, userLocation.longitude)
+
+            // Optimisasi: Jika posisi dan akurasi tidak berubah signifikan (< 0.8 meter), lewati redraw
+            if (existingMarker != null && existingCircle != null) {
+                val prev = existingMarker.position
+                val latDiff = kotlin.math.abs(prev.latitude - userPoint.latitude)
+                val lngDiff = kotlin.math.abs(prev.longitude - userPoint.longitude)
+                if (latDiff < 0.00001 && lngDiff < 0.00001) {
+                    return Pair(existingMarker, existingCircle)
+                }
+            }
 
             // 1. Lingkaran Radius Akurasi GPS (Translucent Blue Halo)
             val accuracyMeters = userLocation.accuracy.toDouble().coerceIn(8.0, 300.0)
@@ -79,7 +94,7 @@ object UserLocationOverlayHelper {
                 mapView.overlays.add(circle)
             }
 
-            // 2. Pin Penanda Surveyor (Icon Modern)
+            // 2. Pin Penanda Surveyor (Gunakan cache Drawable)
             val marker = existingMarker ?: Marker(mapView).apply {
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                 icon = createUserLocationMarkerDrawable(context)

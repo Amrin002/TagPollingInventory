@@ -71,7 +71,10 @@ fun OsmMapView(
         }
     }
 
-    LaunchedEffect(poles, selectedPoleId, userLocation, importedRoute, segmentCoordinates) {
+    val userOverlayRef = remember { arrayOfNulls<Any>(2) }
+
+    // 1. Render Rute & Tiang (Hanya saat data rute/tiang berubah, TIDAK saat GPS bergerak!)
+    LaunchedEffect(poles, selectedPoleId, importedRoute, segmentCoordinates) {
         mapView.overlays.clear()
 
         val allGeoPoints = mutableListOf<GeoPoint>()
@@ -195,14 +198,9 @@ fun OsmMapView(
             }
         }
 
-        // 3. User Real Location Marker & Accuracy Halo
-        UserLocationOverlayHelper.updateUserLocationOverlay(
-            mapView = mapView,
-            userLocation = userLocation,
-            existingMarker = null,
-            existingCircle = null,
-            context = context
-        )
+        // 3. User Real Location Marker & Accuracy Halo (Re-add on top if already initialized)
+        (userOverlayRef[1] as? org.osmdroid.views.overlay.Polygon)?.let { mapView.overlays.add(it) }
+        (userOverlayRef[0] as? Marker)?.let { mapView.overlays.add(it) }
 
         // 4. MAP CENTERING: Always center directly on the segment centroid / bounding box
         val validRoutePoints = allGeoPoints.filter { it.latitude != 0.0 && it.longitude != 0.0 }
@@ -237,11 +235,6 @@ fun OsmMapView(
             if (targetPole != null && targetPole.latitude != 0.0) {
                 mapView.controller.setCenter(GeoPoint(targetPole.latitude, targetPole.longitude))
                 mapView.controller.setZoom(16.5)
-            } else if (userLocation != null && userLocation.isAvailable &&
-                userLocation.latitude in -11.5..6.5 && userLocation.longitude in 95.0..142.0
-            ) {
-                mapView.controller.setCenter(GeoPoint(userLocation.latitude, userLocation.longitude))
-                mapView.controller.setZoom(16.5)
             } else {
                 // Default fallback: Pusat Operasional Area 18 MPO (Timika, Papua)
                 mapView.controller.setCenter(GeoPoint(-4.76609, 136.76967))
@@ -249,7 +242,20 @@ fun OsmMapView(
             }
         }
 
-        mapView.invalidate()
+        mapView.postInvalidate()
+    }
+
+    // Pembaruan lokasi GPS surveyor secara mandiri (tanpa mereset/membersihkan rute dan tiang!)
+    LaunchedEffect(userLocation) {
+        val (m, c) = UserLocationOverlayHelper.updateUserLocationOverlay(
+            mapView = mapView,
+            userLocation = userLocation,
+            existingMarker = userOverlayRef[0] as? Marker,
+            existingCircle = userOverlayRef[1] as? org.osmdroid.views.overlay.Polygon,
+            context = context
+        )
+        userOverlayRef[0] = m
+        userOverlayRef[1] = c
     }
 
     Box(modifier = modifier.fillMaxSize()) {

@@ -100,8 +100,7 @@ fun OsmMultiSegmentMapView(
 
     // Reference map untuk polylines & markers per segment
     val overlayHolders = remember { mutableMapOf<String, SegmentOverlays>() }
-    var userMarker by remember { mutableStateOf<Marker?>(null) }
-    var userCircle by remember { mutableStateOf<org.osmdroid.views.overlay.Polygon?>(null) }
+    val userOverlayRef = remember { arrayOfNulls<Any>(2) } // [0] = Marker, [1] = Polygon
     var lastZoomedCity by remember { mutableStateOf<String?>(null) }
 
     // 1. Bangun overlay segmen saat daftar segments atau filter selectedCity berubah
@@ -195,11 +194,11 @@ fun OsmMultiSegmentMapView(
         }
 
         // Pastikan overlay user tetap di lapisan paling atas
-        userCircle?.let {
+        (userOverlayRef[1] as? org.osmdroid.views.overlay.Polygon)?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
         }
-        userMarker?.let {
+        (userOverlayRef[0] as? Marker)?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
         }
@@ -228,11 +227,11 @@ fun OsmMultiSegmentMapView(
         }
 
         // Overlay user selalu paling atas
-        userCircle?.let {
+        (userOverlayRef[1] as? org.osmdroid.views.overlay.Polygon)?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
         }
-        userMarker?.let {
+        (userOverlayRef[0] as? Marker)?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
         }
@@ -245,12 +244,12 @@ fun OsmMultiSegmentMapView(
         val (m, c) = UserLocationOverlayHelper.updateUserLocationOverlay(
             mapView = mapView,
             userLocation = userLocation,
-            existingMarker = userMarker,
-            existingCircle = userCircle,
+            existingMarker = userOverlayRef[0] as? Marker,
+            existingCircle = userOverlayRef[1] as? org.osmdroid.views.overlay.Polygon,
             context = context
         )
-        userMarker = m
-        userCircle = c
+        userOverlayRef[0] = m
+        userOverlayRef[1] = c
     }
 
     Box(modifier = modifier) {

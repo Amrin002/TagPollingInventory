@@ -110,8 +110,7 @@ fun OsmSegmentDetailMapView(
 
     // Reference untuk overlay rute, marker tiang, dan user location
     val poleMarkers = remember { mutableMapOf<String, Marker>() }
-    var userMarker by remember { mutableStateOf<Marker?>(null) }
-    var userCircle by remember { mutableStateOf<org.osmdroid.views.overlay.Polygon?>(null) }
+    val userOverlayRef = remember { arrayOfNulls<Any>(2) } // [0] = Marker, [1] = Polygon
     var lastFittedSegmentId by remember { mutableStateOf<String?>(null) }
 
     // Fungsi helper untuk menghitung bounding box dan animasi fokus
@@ -219,7 +218,7 @@ fun OsmSegmentDetailMapView(
         }
 
         // Pastikan marker user tetap di atas jika ada
-        userMarker?.let {
+        (userOverlayRef[0] as? Marker)?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
         }
@@ -245,7 +244,7 @@ fun OsmSegmentDetailMapView(
                 }
             }
         }
-        userMarker?.let {
+        (userOverlayRef[0] as? Marker)?.let {
             mapView.overlays.remove(it)
             mapView.overlays.add(it)
         }
@@ -257,12 +256,12 @@ fun OsmSegmentDetailMapView(
         val (m, c) = UserLocationOverlayHelper.updateUserLocationOverlay(
             mapView = mapView,
             userLocation = userLocation,
-            existingMarker = userMarker,
-            existingCircle = userCircle,
+            existingMarker = userOverlayRef[0] as? Marker,
+            existingCircle = userOverlayRef[1] as? org.osmdroid.views.overlay.Polygon,
             context = context
         )
-        userMarker = m
-        userCircle = c
+        userOverlayRef[0] = m
+        userOverlayRef[1] = c
     }
 
     Box(modifier = modifier) {

@@ -66,6 +66,12 @@ class LocationProvider(private val context: Context) {
     private var currentAvgCn0 = 0f
     private var currentConstellations = listOf<String>()
 
+    // Deadband throttle to eliminate UI thrashing and frame drops
+    private var lastEmittedTime = 0L
+    private var lastEmittedLat = 0.0
+    private var lastEmittedLng = 0.0
+    private var lastEmittedAcc = 0f
+
     fun hasLocationPermission(): Boolean {
         val fine = ContextCompat.checkSelfPermission(
             context,
@@ -101,12 +107,13 @@ class LocationProvider(private val context: Context) {
         }
 
         // 2. Fused Location Provider (Google Play Services)
+        var fusedStarted = false
         try {
             val locationRequest = LocationRequest.Builder(
                 Priority.PRIORITY_HIGH_ACCURACY,
-                1000L
+                1500L
             ).setMinUpdateIntervalMillis(1000L)
-                .setWaitForAccurateLocation(false) // Segera kirim lokasi terbaik tanpa menunggu GNSS lock lama
+                .setWaitForAccurateLocation(false)
                 .build()
 
             locationCallback = object : LocationCallback() {
@@ -121,6 +128,7 @@ class LocationProvider(private val context: Context) {
                 locationCallback!!,
                 context.mainLooper
             )
+            fusedStarted = true
 
             fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
                 if (loc != null) {
@@ -131,8 +139,10 @@ class LocationProvider(private val context: Context) {
             e.printStackTrace()
         }
 
-        // 3. Native Location Manager sebagai listener paralel (berguna di dalam ruangan / saat Fused lambat)
-        tryFallbackNativeLocationManager()
+        // 3. Fallback hanya jika Fused Location Provider tidak tersedia / gagal
+        if (!fusedStarted) {
+            tryFallbackNativeLocationManager()
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -285,24 +295,42 @@ class LocationProvider(private val context: Context) {
                 else -> GpsQualityClass.RED
             }
 
-            _currentLocation.value = LocationData(
-                latitude = avgLat,
-                longitude = avgLng,
-                accuracy = avgAccuracy,
-                altitude = if (location.hasAltitude()) location.altitude else 15.0,
-                isAvailable = true,
-                providerName = provider,
-                timestamp = location.time,
-                satellitesUsed = currentSatellitesUsed,
-                satellitesVisible = currentSatellitesVisible,
-                avgCn0DbHz = currentAvgCn0,
-                constellations = currentConstellations,
-                sampleCount = locationSamples.size,
-                targetSamples = targetSampleCount,
-                sampleDispersionMeters = dispersion,
-                qualityClass = qualityClass,
-                isSamplingComplete = locationSamples.size >= targetSampleCount
-            )
+            val now = System.currentTimeMillis()
+            val timeDelta = now - lastEmittedTime
+            val dist = if (lastEmittedLat != 0.0 && lastEmittedLng != 0.0) {
+                val distArr = FloatArray(1)
+                Location.distanceBetween(lastEmittedLat, lastEmittedLng, avgLat, avgLng, distArr)
+                distArr[0]
+            } else Float.MAX_VALUE
+
+            val accDelta = kotlin.math.abs(avgAccuracy - lastEmittedAcc)
+
+            // Smart deadband: only emit if moved > 1.2m, accuracy shifted > 1.5m, or > 2.5s elapsed
+            if (lastEmittedLat == 0.0 || dist >= 1.2f || accDelta >= 1.5f || timeDelta >= 2500L) {
+                lastEmittedTime = now
+                lastEmittedLat = avgLat
+                lastEmittedLng = avgLng
+                lastEmittedAcc = avgAccuracy
+
+                _currentLocation.value = LocationData(
+                    latitude = avgLat,
+                    longitude = avgLng,
+                    accuracy = avgAccuracy,
+                    altitude = if (location.hasAltitude()) location.altitude else 15.0,
+                    isAvailable = true,
+                    providerName = provider,
+                    timestamp = location.time,
+                    satellitesUsed = currentSatellitesUsed,
+                    satellitesVisible = currentSatellitesVisible,
+                    avgCn0DbHz = currentAvgCn0,
+                    constellations = currentConstellations,
+                    sampleCount = locationSamples.size,
+                    targetSamples = targetSampleCount,
+                    sampleDispersionMeters = dispersion,
+                    qualityClass = qualityClass,
+                    isSamplingComplete = locationSamples.size >= targetSampleCount
+                )
+            }
         }
     }
 

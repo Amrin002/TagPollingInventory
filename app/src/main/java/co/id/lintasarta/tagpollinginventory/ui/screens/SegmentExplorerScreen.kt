@@ -27,6 +27,8 @@ import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.*
 
@@ -69,25 +71,40 @@ fun SegmentExplorerScreen(
         }
     }
 
-    // Hitung jarak ke seluruh segmen berdasarkan GPS Surveyor saat ini
-    val segmentsWithDistance = remember(project.segments, currentLocation) {
-        val userLat = currentLocation.latitude
-        val userLng = currentLocation.longitude
-        val hasGps = userLat != 0.0 && userLng != 0.0
+    // Kuantisasi koordinat GPS (~25 meter) agar perhitungan jarak segmen
+    // tidak dijalankan terus-menerus saat surveyor diam/berjalan pelan.
+    val quantizedLat = remember(currentLocation.latitude) {
+        (currentLocation.latitude * 4000).roundToLong() / 4000.0
+    }
+    val quantizedLng = remember(currentLocation.longitude) {
+        (currentLocation.longitude * 4000).roundToLong() / 4000.0
+    }
 
-        project.segments.map { segment ->
-            val distMeters = if (hasGps) {
-                calculateDistanceToSegment(userLat, userLng, segment)
-            } else {
-                Double.MAX_VALUE
+    // Hitung jarak ke seluruh segmen di background thread (Dispatchers.Default)
+    // agar UI thread 100% bebas dari lag dan frame drop saat scrolling
+    val segmentsWithDistance by produceState(
+        initialValue = project.segments.map { Pair(it, Double.MAX_VALUE) },
+        key1 = project.segments,
+        key2 = quantizedLat,
+        key3 = quantizedLng
+    ) {
+        val hasGps = quantizedLat != 0.0 && quantizedLng != 0.0
+        val result = withContext(Dispatchers.Default) {
+            project.segments.map { segment ->
+                val distMeters = if (hasGps) {
+                    calculateDistanceToSegment(quantizedLat, quantizedLng, segment)
+                } else {
+                    Double.MAX_VALUE
+                }
+                Pair(segment, distMeters)
             }
-            Pair(segment, distMeters)
         }
+        value = result
     }
 
     // Segmen terdekat (< 2 km dari posisi GPS surveyor)
     val nearestSegmentPair = remember(segmentsWithDistance) {
-        if (currentLocation.latitude != 0.0 && currentLocation.longitude != 0.0) {
+        if (quantizedLat != 0.0 && quantizedLng != 0.0) {
             val nearest = segmentsWithDistance.minByOrNull { it.second }
             if (nearest != null && nearest.second <= 2000.0) nearest else null
         } else null
