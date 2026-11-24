@@ -41,6 +41,89 @@ fun MainNavigationScreen(viewModel: MainViewModel) {
     val currentTab by viewModel.currentTab.collectAsState()
     val currentScreen by viewModel.currentScreen.collectAsState()
 
+    val isSurveyorConfigured = remember { viewModel.isSurveyorNameConfigured() }
+    var showSurveyorDialog by remember { mutableStateOf(!isSurveyorConfigured) }
+    var surveyorInputName by remember { mutableStateOf("") }
+
+    if (showSurveyorDialog) {
+        val deviceModel = remember { viewModel.getDeviceModel() }
+        AlertDialog(
+            onDismissRequest = {
+                showSurveyorDialog = false
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Badge,
+                    contentDescription = null,
+                    tint = TelecomPrimary,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Identitas Surveyor Lapangan",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "Aplikasi ini berjalan mandiri tanpa login. Masukkan nama Anda agar tercatat resmi di Google Earth & file survei KMZ.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF455A64)
+                    )
+                    OutlinedTextField(
+                        value = surveyorInputName,
+                        onValueChange = { surveyorInputName = it },
+                        label = { Text("Nama Lengkap Anda") },
+                        placeholder = { Text("Contoh: Amrin Alamsyah") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF1F8E9),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC8E6C9))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Smartphone, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Tipe Perangkat: $deviceModel",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF1B5E20)
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (surveyorInputName.isNotBlank()) {
+                            viewModel.updateSurveyorName(surveyorInputName)
+                        }
+                        showSurveyorDialog = false
+                    },
+                    enabled = surveyorInputName.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
+                ) {
+                    Text("Simpan & Mulai Survei")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSurveyorDialog = false }) {
+                    Text("Lewati Dulu")
+                }
+            }
+        )
+    }
+
     val showBottomBar = currentScreen == ScreenFlow.TAB_ROOT
     val canGoBack = (currentScreen != ScreenFlow.TAB_ROOT && !(currentScreen == ScreenFlow.LOGIN && !viewModel.userSessionManager.hasActiveSession())) || (currentScreen == ScreenFlow.TAB_ROOT && currentTab != AppTab.DASHBOARD)
 

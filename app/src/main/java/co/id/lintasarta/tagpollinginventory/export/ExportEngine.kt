@@ -17,10 +17,10 @@ class ExportEngine(private val context: Context) {
      * Menghasilkan Ekspor File Resmi Alpaca Master CSV: Alpaca_Master_Poles.csv
      * Kompatibel dengan controller eNims dan script backend Alpaca_kmz.py.
      */
-    fun generateAlpacaMasterCsv(poles: List<Pole>, targetFile: File? = null): File {
+    fun generateAlpacaMasterCsv(poles: List<Pole>, targetFile: File? = null, surveyorInfo: String? = null): File {
         val file = targetFile ?: File(exportDir, "Alpaca_Master_Poles.csv")
         val sb = StringBuilder()
-        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,missing_reason,is_existing_pole,sync_status,timestamp,photo_sha256,equipment\n")
+        sb.append("asset_uid,segment_id,route_name,po_id,asset_class,asset_type,latitude,longitude,raw_latitude,raw_longitude,accuracy,photo_filename,ownership,condition,is_safety_deferred,match_status,missing_reason,is_existing_pole,sync_status,timestamp,photo_sha256,equipment,tagged_by\n")
 
         for (pole in poles) {
             val photoFileName = if (!pole.photoPath.isNullOrEmpty()) {
@@ -53,7 +53,8 @@ class ExportEngine(private val context: Context) {
             sb.append("\"${pole.capturedTimestamp}\",")
             val eqStr = pole.equipment.filter { it.isNotBlank() }.joinToString("; ").replace("\"", "'")
             sb.append("\"${pole.photoSha256 ?: ""}\",")
-            sb.append("\"$eqStr\"\n")
+            sb.append("\"$eqStr\",")
+            sb.append("\"${(surveyorInfo ?: "").replace("\"", "'")}\"\n")
         }
 
         file.writeText(sb.toString())
@@ -68,10 +69,11 @@ class ExportEngine(private val context: Context) {
         poles: List<Pole>,
         segmentName: String,
         importedRoute: ImportedRoute? = null,
+        surveyorInfo: String? = null,
         targetFile: File? = null
     ): File {
         val file = targetFile ?: File(exportDir, "Alpaca_Master.kmz")
-        val kmlContent = generateAlpacaKmlContent(poles, segmentName, importedRoute)
+        val kmlContent = generateAlpacaKmlContent(poles, segmentName, importedRoute, surveyorInfo)
 
         ZipOutputStream(FileOutputStream(file)).use { zip ->
             // 1. Masukkan file KML utama doc.kml
@@ -111,7 +113,8 @@ class ExportEngine(private val context: Context) {
     private fun generateAlpacaKmlContent(
         poles: List<Pole>,
         segmentName: String,
-        importedRoute: ImportedRoute?
+        importedRoute: ImportedRoute?,
+        surveyorInfo: String? = null
     ): String {
         val sb = StringBuilder()
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
@@ -216,6 +219,9 @@ class ExportEngine(private val context: Context) {
                 sb.append("            <tr><td style=\"background:#FFEBEE; color:#C62828;\"><b>Safety Deferral</b></td><td style=\"color:#C62828;\">${pole.safetyDeferralReason ?: "Terhalang"}</td></tr>\n")
             }
             sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>Waktu Survei</b></td><td>${pole.capturedTimestamp}</td></tr>\n")
+            if (!surveyorInfo.isNullOrBlank()) {
+                sb.append("            <tr><td style=\"background:#E8F5E9; color:#1B5E20;\"><b>Di-tag oleh</b></td><td><b>${escapeXml(surveyorInfo)}</b></td></tr>\n")
+            }
             if (!pole.photoSha256.isNullOrEmpty()) {
                 sb.append("            <tr><td style=\"background:#F5F5F5;\"><b>SHA-256</b></td><td style=\"font-family:monospace; font-size:10px;\">${pole.photoSha256.take(16)}...</td></tr>\n")
             }
@@ -244,6 +250,9 @@ class ExportEngine(private val context: Context) {
             if (pole.equipment.isNotEmpty()) {
                 sb.append("        <Data name=\"equipment\"><value>${escapeXml(pole.equipment.joinToString(", "))}</value></Data>\n")
             }
+            if (!surveyorInfo.isNullOrBlank()) {
+                sb.append("        <Data name=\"tagged_by\"><value>${escapeXml(surveyorInfo)}</value></Data>\n")
+            }
             sb.append("      </ExtendedData>\n")
 
             sb.append("      <Point>\n")
@@ -266,7 +275,8 @@ class ExportEngine(private val context: Context) {
         format: ExportFormat,
         poles: List<Pole>,
         options: ExportOptions,
-        importedRoute: ImportedRoute? = null
+        importedRoute: ImportedRoute? = null,
+        surveyorInfo: String? = null
     ): ExportFile {
         val filteredPoles = poles.filter { pole ->
             (options.includeCompleted && pole.status == TagStatus.COMPLETED) ||
@@ -283,12 +293,12 @@ class ExportEngine(private val context: Context) {
         val targetFile = File(exportDir, fileName)
 
         when (format) {
-            ExportFormat.CSV -> generateAlpacaMasterCsv(filteredPoles, targetFile)
+            ExportFormat.CSV -> generateAlpacaMasterCsv(filteredPoles, targetFile, surveyorInfo)
             ExportFormat.KML -> {
-                val kmlText = generateAlpacaKmlContent(filteredPoles, segmentName, importedRoute)
+                val kmlText = generateAlpacaKmlContent(filteredPoles, segmentName, importedRoute, surveyorInfo)
                 targetFile.writeText(kmlText)
             }
-            ExportFormat.KMZ -> generateAlpacaMasterKmz(filteredPoles, segmentName, importedRoute, targetFile)
+            ExportFormat.KMZ -> generateAlpacaMasterKmz(filteredPoles, segmentName, importedRoute, surveyorInfo, targetFile)
         }
 
         return ExportFile(

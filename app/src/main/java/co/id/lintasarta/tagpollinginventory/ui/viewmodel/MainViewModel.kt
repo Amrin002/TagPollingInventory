@@ -469,6 +469,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateSurveyorName(name: String) {
+        userSessionManager.updateSurveyorName(name)
+    }
+
+    fun isSurveyorNameConfigured(): Boolean = userSessionManager.isSurveyorNameConfigured()
+
+    fun getDeviceModel(): String = userSessionManager.getDeviceModel()
+
     fun setOperationalArea(areaId: Int, areaLabel: String) {
         userSessionManager.updateArea(areaId, areaLabel)
         repository.setAreaFilter(areaId)
@@ -606,9 +614,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val activeSeg = repository.project.value.segments.find { it.id == selectedSegmentId.value }
             val segName = activeSeg?.name ?: "SEGMENT_ALL"
 
+            val surveyorName = currentUser.value.displayName.ifBlank { "Field Surveyor" }
+            val deviceModel = getDeviceModel()
+            val surveyorInfo = "Di-tag oleh : $surveyorName ($deviceModel)"
+
             // 1. Generate KMZ
             val kmzTimestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val kmzFileName = "SURVEY_${areaLabel}_${segName}_$kmzTimestamp.kmz"
+            val cleanSurveyor = surveyorName.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_]"), "")
+            val kmzFileName = "SURVEY_${areaLabel}_${segName}_${cleanSurveyor}_$kmzTimestamp.kmz"
             val tempDir = File(getApplication<Application>().cacheDir, "gdrive_uploads").apply { if (!exists()) mkdirs() }
             val tempKmz = File(tempDir, kmzFileName)
 
@@ -617,6 +630,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     poles = polesToUpload,
                     segmentName = "${project.value.name} - $segName",
                     importedRoute = activeRoute.value,
+                    surveyorInfo = surveyorInfo,
                     targetFile = tempKmz
                 )
             }
@@ -631,7 +645,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 areaName = areaLabel,
                 segmentName = segName,
                 poleCount = polesToUpload.size,
-                surveyor = currentUser.value.displayName
+                surveyor = "$surveyorName ($deviceModel)"
             )
 
             _isUploadingGDrive.value = false

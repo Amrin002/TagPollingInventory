@@ -134,6 +134,29 @@ class UserSessionManager(private val context: Context) {
         }
     }
 
+    fun getDeviceModel(): String {
+        val manufacturer = android.os.Build.MANUFACTURER.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString() }
+        val model = android.os.Build.MODEL
+        return if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+    }
+
+    fun isSurveyorNameConfigured(): Boolean {
+        val name = _currentSession.value.displayName
+        return name.isNotBlank() && name != "Field Surveyor" && !name.startsWith("Offline Surveyor") && !name.startsWith("Field Engineer")
+    }
+
+    fun updateSurveyorName(name: String) {
+        val clean = name.trim()
+        if (clean.isBlank()) return
+        val current = _currentSession.value
+        val updated = current.copy(
+            displayName = clean,
+            username = clean.lowercase(Locale.ROOT).replace(" ", "_")
+        )
+        _currentSession.value = updated
+        saveSessionToPrefs(updated)
+    }
+
     fun updateArea(areaId: Int, areaLabel: String) {
         val current = _currentSession.value
         val updated = current.copy(

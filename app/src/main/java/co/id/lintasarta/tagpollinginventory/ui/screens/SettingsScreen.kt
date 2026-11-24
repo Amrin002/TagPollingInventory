@@ -96,6 +96,8 @@ fun SettingsScreen(
         onStartMapDownload = { lat, lng, radius -> viewModel.startMapDownload(lat, lng, radius) },
         onClearMapCache = { viewModel.clearMapCache() },
         onClearAllData = { viewModel.clearAllData() },
+        onUpdateSurveyorName = { viewModel.updateSurveyorName(it) },
+        deviceModel = viewModel.getDeviceModel(),
         onNavigateToCameraSettings = onNavigateToCameraSettings,
         onNavigateToLogin = onNavigateToLogin
     )
@@ -122,6 +124,8 @@ fun SettingsScreenContent(
     gdriveWebhookUrl: String = RnimsApiClient.DEFAULT_GDRIVE_WEBHOOK_URL,
     isSyncingPoles: Boolean = false,
     syncPolesMessage: String? = null,
+    deviceModel: String = "Android Device",
+    onUpdateSurveyorName: (String) -> Unit = {},
     onUpdateBaseUrl: (String) -> Unit = {},
     onTestConnection: () -> Unit = {},
     onSyncMpoSegments: () -> Unit = {},
@@ -141,6 +145,50 @@ fun SettingsScreenContent(
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
     var showAdvancedServerConfig by remember { mutableStateOf(false) }
+    var showEditNameDialog by remember { mutableStateOf(false) }
+    var editNameInput by remember(currentUser.displayName) { mutableStateOf(currentUser.displayName) }
+
+    if (showEditNameDialog) {
+        AlertDialog(
+            onDismissRequest = { showEditNameDialog = false },
+            title = { Text("Ubah Nama Surveyor Lapangan", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Nama ini akan dicantumkan secara otomatis pada setiap pin Google Earth dan file KMZ survei.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF546E7A)
+                    )
+                    OutlinedTextField(
+                        value = editNameInput,
+                        onValueChange = { editNameInput = it },
+                        label = { Text("Nama Lengkap") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (editNameInput.isNotBlank()) {
+                            onUpdateSurveyorName(editNameInput)
+                        }
+                        showEditNameDialog = false
+                    },
+                    enabled = editNameInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary)
+                ) {
+                    Text("Simpan")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditNameDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -244,33 +292,60 @@ fun SettingsScreenContent(
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = currentUser.displayName.ifEmpty { "Field Engineer" },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = currentUser.displayName.ifEmpty { "Field Surveyor" },
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    editNameInput = currentUser.displayName
+                                    showEditNameDialog = true
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Nama Surveyor",
+                                    tint = TelecomPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(2.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            val (roleBadgeBg, roleBadgeColor) = when {
-                                currentUser.role.contains("Admin", ignoreCase = true) -> Color(0xFFF3E5F5) to Color(0xFF6A1B9A)
-                                currentUser.role.contains("Manager", ignoreCase = true) -> Color(0xFFE3F2FD) to Color(0xFF1565C0)
-                                else -> Color(0xFFE8F5E9) to Color(0xFF2E7D32)
-                            }
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = roleBadgeBg
+                                color = Color(0xFFF1F8E9)
                             ) {
-                                Text(
-                                    text = currentUser.role,
+                                Row(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = roleBadgeColor,
-                                    fontSize = 10.sp
-                                )
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Smartphone,
+                                        contentDescription = null,
+                                        tint = Color(0xFF2E7D32),
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(
+                                        text = deviceModel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1B5E20),
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
                             Text(
                                 text = currentUser.email.ifEmpty { currentUser.username },

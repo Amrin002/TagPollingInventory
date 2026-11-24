@@ -386,8 +386,9 @@ fun ReviewExportSyncScreen(
                                     return@Button
                                 }
                                 isExportingLocal = true
+                                val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
                                 coroutineScope.launch(Dispatchers.IO) {
-                                    val csvFile = exportEngine.generateAlpacaMasterCsv(allPoles)
+                                    val csvFile = exportEngine.generateAlpacaMasterCsv(allPoles, surveyorInfo = surveyorInfo)
                                     withContext(Dispatchers.Main) {
                                         isExportingLocal = false
                                         exportedFileResult = csvFile
@@ -417,11 +418,13 @@ fun ReviewExportSyncScreen(
                                     return@Button
                                 }
                                 isExportingLocal = true
+                                val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
                                 coroutineScope.launch(Dispatchers.IO) {
                                     val kmzFile = exportEngine.generateAlpacaMasterKmz(
                                         poles = allPoles,
                                         segmentName = project.name,
-                                        importedRoute = activeRoute
+                                        importedRoute = activeRoute,
+                                        surveyorInfo = surveyorInfo
                                     )
                                     withContext(Dispatchers.Main) {
                                         isExportingLocal = false
