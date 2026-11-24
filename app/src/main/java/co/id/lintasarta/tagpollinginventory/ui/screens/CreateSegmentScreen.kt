@@ -74,8 +74,8 @@ fun CreateSegmentScreenContent(
     val effectiveCityCode = if (userEditedCityCode) cityCode else autoCity
     val effectiveLocCode = if (userEditedLocCode) locationCode else autoLoc
     val previewSeq = startingSequence.toIntOrNull() ?: 1
-    val previewPoleCode = "PL-${effectiveCityCode.ifEmpty { "TMK" }}-${effectiveLocCode.ifEmpty { "PMK" }}-${String.format(
-        Locale.US, "%03d", previewSeq)}"
+    val previewPoleCode = "PL-${effectiveCityCode.ifEmpty { "MPO" }}-${effectiveLocCode.ifEmpty { "SEG" }}-${String.format(
+        Locale.US, "%04d", previewSeq)}"
 
     if (showMpoDialog) {
         MpoSegmentPickerDialog(

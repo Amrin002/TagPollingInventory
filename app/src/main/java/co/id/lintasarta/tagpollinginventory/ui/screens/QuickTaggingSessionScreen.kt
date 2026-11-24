@@ -232,7 +232,7 @@ fun QuickTaggingSessionScreen(
         }
     }
 
-    val displayAssetUid = draftPole?.assetUid?.ifEmpty { draftPole?.poleCode?.ifEmpty { draftPole?.id } } ?: "POL-MPO-TMK-0001"
+    val displayAssetUid = draftPole?.assetUid?.ifEmpty { draftPole?.poleCode?.ifEmpty { draftPole?.id } } ?: "PL-MPO-0001"
     val segmentDisplayName = activeSegment?.name ?: "Segment Alpaca MPO"
 
     Scaffold(
@@ -326,9 +326,11 @@ fun QuickTaggingSessionScreen(
                             }
                             Text(
                                 text = displayAssetUid,
-                                style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = TelecomPrimary
+                                color = TelecomPrimary,
+                                maxLines = 1,
+                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "Urutan #${draftPole?.sequence ?: 1} • Segmen: $segmentDisplayName",

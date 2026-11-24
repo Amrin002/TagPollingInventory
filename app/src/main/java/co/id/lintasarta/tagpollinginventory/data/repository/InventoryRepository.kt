@@ -398,9 +398,14 @@ class InventoryRepository(private val context: Context) {
             maxOf(maxSeqFromPoles, segmentSeq) + 1
         }
 
-        // Format Asset UID Resmi Alpaca PRA: POL-MPO-[KOTA]-[SEQ:04d]
-        val cleanCity = cityCode.trim().uppercase().take(3).ifEmpty { "TMK" }
-        val assetUidStr = "POL-MPO-$cleanCity-${String.format(Locale.US, "%04d", nextSeq)}"
+        // Format Penamaan Standar Lapangan: PL-[KOTA]-[SITE_A-SITE_B]-[SEQ:04d]
+        val assetUidStr = PoleEntity.formatSegmentPoleCode(
+            cityCode = cityCode,
+            orgSite = segment?.orgSite,
+            dstSite = segment?.dstSite,
+            segmentName = segName,
+            sequence = nextSeq
+        )
         val poleId = UUID.randomUUID().toString()
 
         if (segment != null) {
@@ -1266,7 +1271,19 @@ class InventoryRepository(private val context: Context) {
             it.segmentId == segmentId || it.segmentId.removePrefix("SEG-") == segmentId.removePrefix("SEG-") 
         }
         val nextSeq = (existingPolesInSeg.maxOfOrNull { it.sequence } ?: 0) + 1
-        val poleUid = "POL-$cityCode-${String.format(Locale.US, "%04d", nextSeq)}"
+        val cleanId = segmentId.removePrefix("SEG-")
+        val segment = _project.value.segments.find { it.id == segmentId || it.id.removePrefix("SEG-") == cleanId || it.name == segmentId }
+        val segName = segment?.name ?: ""
+        val (autoCity, _) = deriveCodesFromSegmentName(segName)
+        val effectiveCity = segment?.cityCode?.takeIf { it.isNotBlank() } ?: (if (cityCode.isNotBlank()) cityCode else autoCity)
+
+        val poleUid = PoleEntity.formatSegmentPoleCode(
+            cityCode = effectiveCity,
+            orgSite = segment?.orgSite,
+            dstSite = segment?.dstSite,
+            segmentName = segName,
+            sequence = nextSeq
+        )
 
         val derivedHeight = if (assetClass == "pole_7") "7m" else "9m"
 

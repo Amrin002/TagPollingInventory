@@ -180,8 +180,8 @@ fun ImportPreviewScreen(
                         val effectiveCityCode = if (userEditedCityCode) cityCode else autoCity
                         val effectiveLocCode = if (userEditedLocCode) locationCode else autoLoc
                         val previewSeq = startingSequence.toIntOrNull() ?: 1
-                        val previewPoleCode = "PL-${effectiveCityCode.ifEmpty { "JPR" }}-${effectiveLocCode.ifEmpty { "CTR" }}-${String.format(
-                            Locale.US, "%03d", previewSeq)}"
+                        val previewPoleCode = "PL-${effectiveCityCode.ifEmpty { "MPO" }}-${effectiveLocCode.ifEmpty { "SEG" }}-${String.format(
+                            Locale.US, "%04d", previewSeq)}"
                         
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(

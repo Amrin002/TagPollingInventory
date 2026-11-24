@@ -196,6 +196,27 @@ data class PoleEntity(
         get() = if (assetUid.isNotBlank()) assetUid else if (poleCode.isNotBlank()) poleCode else id
 
     companion object {
+        fun formatSegmentPoleCode(
+            cityCode: String,
+            orgSite: String?,
+            dstSite: String?,
+            segmentName: String?,
+            sequence: Int
+        ): String {
+            val cleanCity = cityCode.trim().uppercase().take(4).ifEmpty { "MPO" }
+            val cleanOrg = orgSite?.trim()?.uppercase()?.replace(" ", "")?.replace("/", "-") ?: ""
+            val cleanDst = dstSite?.trim()?.uppercase()?.replace(" ", "")?.replace("/", "-") ?: ""
+            val segPart = if (cleanOrg.isNotBlank() && cleanDst.isNotBlank()) {
+                "$cleanOrg-$cleanDst"
+            } else if (!segmentName.isNullOrBlank()) {
+                segmentName.trim().uppercase().replace(" ", "-").replace("/", "-")
+            } else {
+                "SEG"
+            }
+            val seqStr = String.format(Locale.US, "%04d", sequence)
+            return "PL-$cleanCity-$segPart-$seqStr"
+        }
+
         fun formatAlpacaAssetUid(cityCode: String, sequence: Int): String {
             val cleanCity = cityCode.trim().uppercase().take(3).ifEmpty { "TMK" }
             return "POL-MPO-$cleanCity-${String.format(Locale.US, "%04d", sequence)}"
