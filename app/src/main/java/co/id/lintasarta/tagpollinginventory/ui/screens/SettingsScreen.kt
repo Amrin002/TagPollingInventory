@@ -1,7 +1,5 @@
 package co.id.lintasarta.tagpollinginventory.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,9 +22,7 @@ import co.id.lintasarta.tagpollinginventory.data.auth.UserSession
 import co.id.lintasarta.tagpollinginventory.data.model.Project
 import co.id.lintasarta.tagpollinginventory.location.LocationData
 import co.id.lintasarta.tagpollinginventory.network.AreaDto
-import co.id.lintasarta.tagpollinginventory.network.ConnectionTestResult
 import co.id.lintasarta.tagpollinginventory.network.NetworkStatus
-import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
 import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TagPollingInventoryTheme
@@ -48,16 +43,7 @@ fun SettingsScreen(
     val currentLocation by viewModel.currentLocation.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
     val mapCacheSize by viewModel.mapCacheSizeMB.collectAsState()
-    val rnimsBaseUrl by viewModel.rnimsBaseUrl.collectAsState()
-    val rnimsServerConnected by viewModel.rnimsServerConnected.collectAsState()
-    val connectionTestResult by viewModel.connectionTestResult.collectAsState()
-    val mpoSegments by viewModel.mpoSegments.collectAsState()
-    val isSyncingRnims by viewModel.isSyncingRnims.collectAsState()
-    val rnimsSyncMessage by viewModel.rnimsSyncMessage.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
-    val isSyncingPoles by viewModel.isSyncingPoles.collectAsState()
-    val syncPolesMessage by viewModel.syncPolesMessage.collectAsState()
-    val gdriveWebhookUrl by viewModel.gdriveWebhookUrl.collectAsState()
 
     LaunchedEffect(Unit) {
         viewModel.updateMapCacheSize()
@@ -71,35 +57,16 @@ fun SettingsScreen(
         currentLocation = currentLocation,
         networkStatus = networkStatus,
         mapCacheSize = mapCacheSize,
-        rnimsBaseUrl = rnimsBaseUrl,
-        rnimsServerConnected = rnimsServerConnected,
-        connectionTestResult = connectionTestResult,
-        mpoSegmentsCount = mpoSegments.size,
-        isSyncingRnims = isSyncingRnims,
-        rnimsSyncMessage = rnimsSyncMessage,
         currentUser = currentUser,
         availableAreas = viewModel.availableAreas,
-        gdriveWebhookUrl = gdriveWebhookUrl,
-        isSyncingPoles = isSyncingPoles,
-        syncPolesMessage = syncPolesMessage,
-        onUpdateBaseUrl = { viewModel.setRnimsBaseUrl(it) },
-        onTestConnection = { viewModel.testRnimsConnection() },
-        onSyncMpoSegments = { viewModel.syncMpoSegmentsFromServer() },
-        onSyncPoles = { viewModel.syncPolesToServer() },
-        onUpdateGDriveWebhookUrl = { viewModel.setGDriveWebhookUrl(it) },
-        onTestGDriveWebhook = { cb -> viewModel.testGDriveWebhook(cb) },
-        onLoginRnims = { user, pass, cb -> viewModel.loginRnims(user, pass, cb) },
-        onLoginOffline = { pin -> viewModel.loginOffline(pin) },
-        onLogout = { viewModel.logout() },
+        deviceModel = viewModel.getDeviceModel(),
+        onUpdateSurveyorName = { viewModel.updateSurveyorName(it) },
         onUpdateArea = { id, label -> viewModel.setOperationalArea(id, label) },
         onCancelMapDownload = { viewModel.cancelMapDownload() },
         onStartMapDownload = { lat, lng, radius -> viewModel.startMapDownload(lat, lng, radius) },
         onClearMapCache = { viewModel.clearMapCache() },
         onClearAllData = { viewModel.clearAllData() },
-        onUpdateSurveyorName = { viewModel.updateSurveyorName(it) },
-        deviceModel = viewModel.getDeviceModel(),
-        onNavigateToCameraSettings = onNavigateToCameraSettings,
-        onNavigateToLogin = onNavigateToLogin
+        onNavigateToCameraSettings = onNavigateToCameraSettings
     )
 }
 
@@ -113,38 +80,18 @@ fun SettingsScreenContent(
     currentLocation: LocationData,
     networkStatus: NetworkStatus,
     mapCacheSize: Double,
-    rnimsBaseUrl: String = RnimsApiClient.DEFAULT_USB_URL,
-    rnimsServerConnected: Boolean? = null,
-    connectionTestResult: ConnectionTestResult? = null,
-    mpoSegmentsCount: Int = 143,
-    isSyncingRnims: Boolean = false,
-    rnimsSyncMessage: String? = null,
     currentUser: UserSession = UserSession(),
     availableAreas: List<AreaDto> = emptyList(),
-    gdriveWebhookUrl: String = RnimsApiClient.DEFAULT_GDRIVE_WEBHOOK_URL,
-    isSyncingPoles: Boolean = false,
-    syncPolesMessage: String? = null,
     deviceModel: String = "Android Device",
     onUpdateSurveyorName: (String) -> Unit = {},
-    onUpdateBaseUrl: (String) -> Unit = {},
-    onTestConnection: () -> Unit = {},
-    onSyncMpoSegments: () -> Unit = {},
-    onSyncPoles: () -> Unit = {},
-    onUpdateGDriveWebhookUrl: (String) -> Unit = {},
-    onTestGDriveWebhook: (((Boolean, String) -> Unit)) -> Unit = {},
-    onLoginRnims: (String, String, (Boolean, String) -> Unit) -> Unit = { _, _, _ -> },
-    onLoginOffline: (String) -> Unit = {},
-    onLogout: () -> Unit = {},
     onUpdateArea: (Int, String) -> Unit = { _, _ -> },
     onCancelMapDownload: () -> Unit,
     onStartMapDownload: (lat: Double, lng: Double, radius: Double) -> Unit,
     onClearMapCache: () -> Unit,
     onClearAllData: () -> Unit,
-    onNavigateToCameraSettings: () -> Unit,
-    onNavigateToLogin: () -> Unit = {}
+    onNavigateToCameraSettings: () -> Unit
 ) {
     var showClearDialog by remember { mutableStateOf(false) }
-    var showAdvancedServerConfig by remember { mutableStateOf(false) }
     var showEditNameDialog by remember { mutableStateOf(false) }
     var editNameInput by remember(currentUser.displayName) { mutableStateOf(currentUser.displayName) }
 
@@ -248,18 +195,6 @@ fun SettingsScreenContent(
                         fontWeight = FontWeight.Bold,
                         color = Color.Gray
                     )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (currentUser.isOfflineSession) Color(0xFFFFF3E0) else Color(0xFFE8F5E9)
-                    ) {
-                        Text(
-                            text = if (currentUser.isOfflineSession) "Mode Offline" else "Sesi Online",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = if (currentUser.isOfflineSession) Color(0xFFE65100) else Color(0xFF2E7D32)
-                        )
-                    }
                 }
 
                 Row(
@@ -453,404 +388,11 @@ fun SettingsScreenContent(
                             }
                         }
                     }
-
-                    Text(
-                        text = "Memilih area akan otomatis memfilter segmen pada Peta, Daftar Segmen, dan rute survei tanpa membutuhkan koneksi server kantor.",
-                        fontSize = 11.sp,
-                        color = Color.Gray,
-                        lineHeight = 15.sp
-                    )
-                }
-
-                // Banner Status Standalone Offline
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFFF1F8E9),
-                    border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF2E7D32),
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Column {
-                            Text(
-                                text = "Mode Mandiri Offline Aktif",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp,
-                                color = Color(0xFF1B5E20)
-                            )
-                            Text(
-                                text = "Akses server kantor tertutup dari jaringan publik (intranet only). Otentikasi login/logout dinonaktifkan agar surveyor leluasa bekerja di lapangan.",
-                                fontSize = 11.sp,
-                                color = Color(0xFF33691E),
-                                lineHeight = 14.sp
-                            )
-                        }
-                    }
                 }
             }
         }
 
-        // 2b. Konfigurasi Google Drive Webhook Sync
-        var isEditingGDriveUrl by remember { mutableStateOf(false) }
-        var tempGDriveUrl by remember(gdriveWebhookUrl) { mutableStateOf(gdriveWebhookUrl) }
-        var isTestingGDrive by remember { mutableStateOf(false) }
-        var gdriveTestResultText by remember { mutableStateOf<String?>(null) }
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = null,
-                            tint = Color(0xFF1B5E20),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = "DESTINASI GOOGLE DRIVE (SYNC KMZ)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF1B5E20)
-                        )
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = Color(0xFFE8F5E9)
-                    ) {
-                        Text(
-                            text = "Webhook Siap",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2E7D32)
-                        )
-                    }
-                }
-
-                Text(
-                    text = "File survei KMZ akan otomatis diunggah dan disimpan ke folder:",
-                    fontSize = 12.sp,
-                    color = Color.DarkGray
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color(0xFFF1F8E9),
-                    border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(
-                            text = "📁 TAGPOLLING_INVENTORY_RNIMS / Area_${currentUser.areaId}_${currentUser.areaLabel}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Color(0xFF1B5E20)
-                        )
-                        Text(
-                            text = "Penyimpanan otomatis tanpa memerlukan login Google di perangkat ini.",
-                            fontSize = 10.sp,
-                            color = Color(0xFF33691E)
-                        )
-                    }
-                }
-
-                if (isEditingGDriveUrl) {
-                    OutlinedTextField(
-                        value = tempGDriveUrl,
-                        onValueChange = { tempGDriveUrl = it },
-                        label = { Text("URL Google Apps Script Webhook") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = false,
-                        maxLines = 3,
-                        textStyle = MaterialTheme.typography.bodySmall
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = {
-                            tempGDriveUrl = gdriveWebhookUrl
-                            isEditingGDriveUrl = false
-                        }) {
-                            Text("Batal")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                onUpdateGDriveWebhookUrl(tempGDriveUrl)
-                                isEditingGDriveUrl = false
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
-                        ) {
-                            Text("Simpan URL")
-                        }
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "URL: ${gdriveWebhookUrl.take(45)}...",
-                            fontSize = 11.sp,
-                            color = Color.Gray,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        TextButton(onClick = { isEditingGDriveUrl = true }) {
-                            Text("Ubah", fontSize = 11.sp)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(
-                        onClick = {
-                            isTestingGDrive = true
-                            gdriveTestResultText = "Memeriksa webhook..."
-                            onTestGDriveWebhook { ok, msg ->
-                                isTestingGDrive = false
-                                gdriveTestResultText = msg
-                            }
-                        },
-                        enabled = !isTestingGDrive,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (isTestingGDrive) {
-                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(6.dp))
-                        } else {
-                            Icon(Icons.Default.NetworkCheck, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-                        Text("Uji Webhook GDrive", fontSize = 12.sp)
-                    }
-                }
-
-                if (!gdriveTestResultText.isNullOrBlank()) {
-                    Text(
-                        text = gdriveTestResultText!!,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (gdriveTestResultText!!.contains("Online")) Color(0xFF2E7D32) else Color(0xFFC62828)
-                    )
-                }
-            }
-        }
-
-        // 3. Sinkronisasi Data & Server RNIMS
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "SINKRONISASI SERVER",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray
-                    )
-
-                    val statusText = when {
-                        rnimsServerConnected == true -> "Terhubung (${connectionTestResult?.latencyMs ?: 0}ms)"
-                        rnimsServerConnected == false -> "Server Offline"
-                        else -> "Belum Diperiksa"
-                    }
-                    val statusColor = when {
-                        rnimsServerConnected == true -> Color(0xFF2E7D32)
-                        rnimsServerConnected == false -> Color(0xFFC62828)
-                        else -> Color.Gray
-                    }
-                    val statusBg = when {
-                        rnimsServerConnected == true -> Color(0xFFE8F5E9)
-                        rnimsServerConnected == false -> Color(0xFFFFEBEE)
-                        else -> Color(0xFFF5F5F5)
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = statusBg
-                    ) {
-                        Text(
-                            text = statusText,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = statusColor
-                        )
-                    }
-                }
-
-                // Action Buttons for Technicians
-                Button(
-                    onClick = { onSyncPoles() },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = TelecomPrimary),
-                    shape = RoundedCornerShape(8.dp),
-                    enabled = !isSyncingPoles
-                ) {
-                    if (isSyncingPoles) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Mengirim Data...")
-                    } else {
-                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Kirim Data Survei ke Server", fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                OutlinedButton(
-                    onClick = { onSyncMpoSegments() },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    enabled = !isSyncingRnims
-                ) {
-                    if (isSyncingRnims) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Memperbarui Segmen...")
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Perbarui Data Segmen (143 Rute)")
-                    }
-                }
-
-                if (rnimsSyncMessage != null || syncPolesMessage != null) {
-                    val msg = syncPolesMessage ?: rnimsSyncMessage ?: ""
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = Color(0xFFF5F5F5),
-                        shape = RoundedCornerShape(6.dp)
-                    ) {
-                        Text(
-                            text = msg,
-                            modifier = Modifier.padding(8.dp),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.DarkGray
-                        )
-                    }
-                }
-
-                // Collapsible Advanced Server Configuration (Cleaner & hidden from regular technicians)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showAdvancedServerConfig = !showAdvancedServerConfig }
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Pengaturan Alamat Server",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Icon(
-                        imageVector = if (showAdvancedServerConfig) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = Color.Gray,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                AnimatedVisibility(visible = showAdvancedServerConfig) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFFF8F9FA), RoundedCornerShape(8.dp))
-                            .padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            FilterChip(
-                                selected = rnimsBaseUrl == RnimsApiClient.DEFAULT_USB_URL,
-                                onClick = { onUpdateBaseUrl(RnimsApiClient.DEFAULT_USB_URL) },
-                                label = { Text("USB", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = rnimsBaseUrl == RnimsApiClient.DEFAULT_WIFI_URL,
-                                onClick = { onUpdateBaseUrl(RnimsApiClient.DEFAULT_WIFI_URL) },
-                                label = { Text("Wi-Fi", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                            FilterChip(
-                                selected = rnimsBaseUrl == RnimsApiClient.DEFAULT_PROD_URL,
-                                onClick = { onUpdateBaseUrl(RnimsApiClient.DEFAULT_PROD_URL) },
-                                label = { Text("Prod", fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        var inputUrl by remember(rnimsBaseUrl) { mutableStateOf(rnimsBaseUrl) }
-                        OutlinedTextField(
-                            value = inputUrl,
-                            onValueChange = {
-                                inputUrl = it
-                                onUpdateBaseUrl(it)
-                            },
-                            label = { Text("URL Server", fontSize = 12.sp) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            trailingIcon = {
-                                IconButton(onClick = { onTestConnection() }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Test")
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. Pengaturan Kamera Geotag SOP
+        // 3. Pengaturan Kamera Geotag SOP
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -905,7 +447,7 @@ fun SettingsScreenContent(
             }
         }
 
-        // 5. Peta & Penyimpanan Offline
+        // 4. Peta & Penyimpanan Offline
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -1003,7 +545,7 @@ fun SettingsScreenContent(
             }
         }
 
-        // 6. Simple Footer
+        // 5. Simple Footer
         Column(
             modifier = Modifier
                 .fillMaxWidth()
