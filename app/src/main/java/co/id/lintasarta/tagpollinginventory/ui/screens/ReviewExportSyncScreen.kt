@@ -3,23 +3,19 @@ package co.id.lintasarta.tagpollinginventory.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -28,11 +24,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
-import co.id.lintasarta.tagpollinginventory.data.model.ExportFormat
 import co.id.lintasarta.tagpollinginventory.data.model.Pole
 import co.id.lintasarta.tagpollinginventory.export.ExportEngine
 import co.id.lintasarta.tagpollinginventory.network.GDriveUploadResponse
-import co.id.lintasarta.tagpollinginventory.ui.components.calculateRealDistanceMeters
+import co.id.lintasarta.tagpollinginventory.ui.components.NetworkStatusDot
 import co.id.lintasarta.tagpollinginventory.ui.theme.NeutralBackground
 import co.id.lintasarta.tagpollinginventory.ui.theme.TelecomPrimary
 import co.id.lintasarta.tagpollinginventory.ui.viewmodel.MainViewModel
@@ -41,18 +36,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
-import kotlin.math.roundToInt
 
-/**
- * LAYAR 4: REVIEW, EXPORT & SYNC SERVER
- *
- * Mengakomodasi 100% Standar Alpaca PRA & Architecture v2.3:
- * - Statistik Segmen: Total Tiang, Total T7 (pole_7), Total T9 (pole_9), Rata-rata Span Jarak Tiang.
- * - Tombol 1: "Export Alpaca Master CSV" (Alpaca_Master_Poles.csv)
- * - Tombol 2: "Export Alpaca Master KMZ" (Alpaca_Master.kmz)
- * - Tombol 3: "Sinkronisasi ke API Alpaca RNIMS / eNims"
- * - Daftar Tiang Detail dengan indikator P7/P9, Safety Deferral, dan SHA-256 watermark.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReviewExportSyncScreen(
@@ -64,11 +48,8 @@ fun ReviewExportSyncScreen(
 
     val project by viewModel.project.collectAsState()
     val polesMap by viewModel.poles.collectAsState()
-    val isSyncingPoles by viewModel.isSyncingPoles.collectAsState()
-    val rnimsBaseUrl by viewModel.rnimsBaseUrl.collectAsState()
     val networkStatus by viewModel.networkStatus.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
-    val selectedSegmentId by viewModel.selectedSegmentId.collectAsState()
     val activeRoute by viewModel.activeRoute.collectAsState()
 
     val exportEngine = remember { ExportEngine(context) }
@@ -79,66 +60,22 @@ fun ReviewExportSyncScreen(
         )
     }
 
-    var selectedFilterSegment by remember { mutableStateOf("ALL") }
-    var selectedFilterStatus by remember { mutableStateOf("ALL") } // ALL, PENDING, SYNCED, SAFETY
-    var syncResultDialogMessage by remember { mutableStateOf<String?>(null) }
-    var syncSuccessState by remember { mutableStateOf(false) }
-
-    // Export Result Dialog State
+    // Export & Upload States
+    var isExportingKmz by remember { mutableStateOf(false) }
+    var isExportingCsv by remember { mutableStateOf(false) }
     var exportedFileResult by remember { mutableStateOf<File?>(null) }
-    var isExportingLocal by remember { mutableStateOf(false) }
 
-    // Google Drive Sync State
     val isUploadingGDrive by viewModel.isUploadingGDrive.collectAsState()
     val gdriveUploadMessage by viewModel.gdriveUploadMessage.collectAsState()
     var gdriveUploadResultDialog by remember { mutableStateOf<GDriveUploadResponse?>(null) }
     var gdriveUploadErrorDialog by remember { mutableStateOf<String?>(null) }
+    var poleToDelete by remember { mutableStateOf<Pole?>(null) }
 
-    val filteredPoles = remember(allPoles, selectedFilterSegment, selectedFilterStatus) {
-        allPoles.filter { pole ->
-            val matchSegment = selectedFilterSegment == "ALL" || pole.segmentId == selectedFilterSegment
-            val matchStatus = when (selectedFilterStatus) {
-                "PENDING" -> pole.syncStatus == "PENDING"
-                "SYNCED" -> pole.syncStatus == "SYNCED"
-                "SAFETY" -> pole.isSafetyDeferred
-                else -> true
-            }
-            matchSegment && matchStatus
-        }
-    }
-
-    // Statistik Alpaca PRA
     val totalPolesCount = allPoles.size
     val totalP7Count = allPoles.count { it.assetClass == "pole_7" }
     val totalP9Count = allPoles.count { it.assetClass == "pole_9" || it.assetClass.isBlank() }
-    val pendingPolesCount = allPoles.count { it.syncStatus == "PENDING" }
-    val syncedPolesCount = allPoles.count { it.syncStatus == "SYNCED" }
+    val photosCount = allPoles.count { !it.photoPath.isNullOrBlank() }
     val safetyDeferredCount = allPoles.count { it.isSafetyDeferred }
-
-    // Estimasi Rata-rata Span Jarak Antar-Tiang
-    val averageSpanMeters = remember(allPoles) {
-        val sortedBySeq = allPoles.filter { it.latitude != 0.0 && it.longitude != 0.0 }
-            .sortedBy { it.sequence }
-        if (sortedBySeq.size >= 2) {
-            var totalDist = 0.0
-            var count = 0
-            for (i in 0 until sortedBySeq.size - 1) {
-                val d = calculateRealDistanceMeters(
-                    sortedBySeq[i].latitude,
-                    sortedBySeq[i].longitude,
-                    sortedBySeq[i + 1].latitude,
-                    sortedBySeq[i + 1].longitude
-                )
-                if (d in 5.0..200.0) { // filter out outlier distance
-                    totalDist += d
-                    count++
-                }
-            }
-            if (count > 0) (totalDist / count).roundToInt() else 45
-        } else {
-            50
-        }
-    }
 
     Scaffold(
         topBar = {
@@ -149,48 +86,25 @@ fun ReviewExportSyncScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
                         Text(
                             text = "Sync & Export",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "Area ${currentUser.areaId} ${currentUser.areaLabel.uppercase()} • Alpaca PRA Master & Sync",
-                            fontSize = 11.sp,
+                            text = "Area ${currentUser.areaId} - ${currentUser.areaLabel} • $totalPolesCount Tiang Disurvei",
+                            fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.85f)
                         )
                     }
 
-                    // Staging Mode Badge
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (networkStatus.isOnline) Color(0xFF1B5E20) else Color(0xFF455A64)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(if (networkStatus.isOnline) Color(0xFF00E676) else Color(0xFFFFB74D))
-                            )
-                            Spacer(modifier = Modifier.width(5.dp))
-                            Text(
-                                text = if (rnimsBaseUrl.contains("127.0.0.1")) "USB (ADB)" else if (networkStatus.isOnline) "ONLINE" else "OFFLINE",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
-                        }
-                    }
+                    NetworkStatusDot(networkStatus = networkStatus, size = 10.dp)
                 }
             }
         }
@@ -200,22 +114,20 @@ fun ReviewExportSyncScreen(
                 .fillMaxSize()
                 .background(NeutralBackground)
                 .padding(innerPadding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // =========================================================================
-            // 1. STATISTIK INVENTARIS ALPACA PRA
-            // =========================================================================
+            // 1. RINGKASAN STATISTIK
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -223,53 +135,45 @@ fun ReviewExportSyncScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "RINGKASAN ASET TIANG SEWA (PRA)",
+                                text = "RINGKASAN SURVEI",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TelecomPrimary,
-                                letterSpacing = 0.8.sp
+                                color = TelecomPrimary
                             )
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFFE8F5E9)
-                            ) {
+                            if (photosCount > 0) {
                                 Text(
-                                    text = "Span Rata-rata: ±${averageSpanMeters}m",
+                                    text = "$photosCount Foto Terlampir",
                                     fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF2E7D32),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF2E7D32)
                                 )
                             }
                         }
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             StatBox(
                                 label = "Total Tiang",
                                 value = "$totalPolesCount",
                                 icon = Icons.Default.LocationOn,
-                                color = TelecomPrimary
+                                color = TelecomPrimary,
+                                modifier = Modifier.weight(1f)
                             )
                             StatBox(
-                                label = "Tiang 7M (T7)",
+                                label = "Tiang 7M",
                                 value = "$totalP7Count",
                                 icon = Icons.Default.Height,
-                                color = Color(0xFFFF9800)
+                                color = Color(0xFFE65100),
+                                modifier = Modifier.weight(1f)
                             )
                             StatBox(
-                                label = "Tiang 9M (T9)",
+                                label = "Tiang 9M",
                                 value = "$totalP9Count",
                                 icon = Icons.Default.VerticalAlignTop,
-                                color = Color(0xFF1565C0)
-                            )
-                            StatBox(
-                                label = "Pending Sync",
-                                value = "$pendingPolesCount",
-                                icon = Icons.Outlined.CloudQueue,
-                                color = Color(0xFFEF6C00)
+                                color = Color(0xFF1565C0),
+                                modifier = Modifier.weight(1f)
                             )
                         }
 
@@ -280,18 +184,18 @@ fun ReviewExportSyncScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(8.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Warning,
                                         contentDescription = null,
                                         tint = Color(0xFFC62828),
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(15.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "$safetyDeferredCount tiang tercatat Approach Safety Deferral (Terhalang medan/bahaya)",
+                                        text = "$safetyDeferredCount tiang tercatat Safety Deferral",
                                         fontSize = 11.sp,
                                         color = Color(0xFFC62828),
                                         fontWeight = FontWeight.Medium
@@ -303,28 +207,26 @@ fun ReviewExportSyncScreen(
                 }
             }
 
-            // =========================================================================
-            // 2. TIGA TOMBOL AKSI UTAMA (CSV, KMZ, SYNC SERVER)
-            // =========================================================================
+            // 2. AKSI EKSPOR & UPLOAD (RESPONSIF & BERSIH)
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "AKSI EKSPOR & SINKRONISASI ALPACA",
+                            text = "EKSPOR & CADANGAN DATA",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF37474F)
                         )
 
-                        // TOMBOL UTAMA: KIRIM KE GOOGLE DRIVE (OTOMATIS MASUK FOLDER BY AREA ID)
+                        // TOMBOL UTAMA: UPLOAD GOOGLE DRIVE
                         Button(
                             onClick = {
                                 if (allPoles.isEmpty()) {
@@ -339,165 +241,123 @@ fun ReviewExportSyncScreen(
                                     }
                                 }
                             },
-                            enabled = !isUploadingGDrive && !isExportingLocal,
+                            enabled = !isUploadingGDrive && !isExportingKmz && !isExportingCsv,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(52.dp),
+                                .height(50.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20)),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             if (isUploadingGDrive) {
                                 CircularProgressIndicator(
                                     color = Color.White,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(
-                                    text = gdriveUploadMessage ?: "Mengunggah KMZ ke Google Drive...",
+                                    text = gdriveUploadMessage ?: "Mengunggah KMZ...",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             } else {
-                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(22.dp))
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text(
-                                        text = "Kirim ke Google Drive (Area ${currentUser.areaId} - ${currentUser.areaLabel})",
-                                        fontWeight = FontWeight.ExtraBold,
-                                        fontSize = 13.sp
-                                    )
-                                    Text(
-                                        text = "Otomatis diarsipkan format KMZ ke folder Area_${currentUser.areaId}_${currentUser.areaLabel}",
-                                        fontSize = 10.sp,
-                                        color = Color.White.copy(alpha = 0.85f)
-                                    )
-                                }
-                            }
-                        }
-
-                        // TOMBOL 1: EXPORT ALPACA MASTER CSV (Alpaca_Master_Poles.csv)
-                        Button(
-                            onClick = {
-                                if (allPoles.isEmpty()) {
-                                    Toast.makeText(context, "Belum ada tiang untuk diekspor.", Toast.LENGTH_SHORT).show()
-                                    return@Button
-                                }
-                                isExportingLocal = true
-                                val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
-                                coroutineScope.launch(Dispatchers.IO) {
-                                    val csvFile = exportEngine.generateAlpacaMasterCsv(allPoles, surveyorInfo = surveyorInfo)
-                                    withContext(Dispatchers.Main) {
-                                        isExportingLocal = false
-                                        exportedFileResult = csvFile
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B)),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Export Alpaca Master CSV (Alpaca_Master_Poles.csv)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        // TOMBOL 2: EXPORT ALPACA MASTER KMZ (Alpaca_Master.kmz)
-                        Button(
-                            onClick = {
-                                if (allPoles.isEmpty()) {
-                                    Toast.makeText(context, "Belum ada tiang untuk diekspor.", Toast.LENGTH_SHORT).show()
-                                    return@Button
-                                }
-                                isExportingLocal = true
-                                val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
-                                coroutineScope.launch(Dispatchers.IO) {
-                                    val kmzFile = exportEngine.generateAlpacaMasterKmz(
-                                        poles = allPoles,
-                                        segmentName = project.name,
-                                        importedRoute = activeRoute,
-                                        surveyorInfo = surveyorInfo
-                                    )
-                                    withContext(Dispatchers.Main) {
-                                        isExportingLocal = false
-                                        exportedFileResult = kmzFile
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(46.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Export Alpaca Master KMZ (Alpaca_Master.kmz)",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                        }
-
-                        // TOMBOL 3: SINKRONISASI KE API DASHBOARD ALPACA RNIMS / eNims
-                        Button(
-                            onClick = {
-                                if (pendingPolesCount == 0 && totalPolesCount == 0) {
-                                    Toast.makeText(context, "Belum ada data tiang yang disurvei.", Toast.LENGTH_SHORT).show()
-                                    return@Button
-                                }
-
-                                viewModel.syncPolesToServer { success, msg ->
-                                    syncSuccessState = success
-                                    syncResultDialogMessage = msg
-                                }
-                            },
-                            enabled = !isSyncingPoles && !isExportingLocal,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (pendingPolesCount > 0) Color(0xFF2E7D32) else Color(0xFF455A64)
-                            ),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            if (isSyncingPoles) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    modifier = Modifier.size(20.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Mengirim ke API Alpaca PRA...",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp
-                                )
-                            } else {
                                 Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Sinkronisasi ke API Alpaca RNIMS / eNims",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 13.sp
+                                    text = "Upload KMZ ke Google Drive",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
                                 )
+                            }
+                        }
+
+                        // DUA TOMBOL EKSPOR LOKAL (KMZ & CSV)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Ekspor KMZ
+                            Button(
+                                onClick = {
+                                    if (allPoles.isEmpty()) {
+                                        Toast.makeText(context, "Belum ada tiang untuk diekspor.", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    isExportingKmz = true
+                                    val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val kmzFile = exportEngine.generateAlpacaMasterKmz(
+                                            poles = allPoles,
+                                            segmentName = project.name,
+                                            importedRoute = activeRoute,
+                                            surveyorInfo = surveyorInfo
+                                        )
+                                        withContext(Dispatchers.Main) {
+                                            isExportingKmz = false
+                                            exportedFileResult = kmzFile
+                                        }
+                                    }
+                                },
+                                enabled = !isUploadingGDrive && !isExportingKmz && !isExportingCsv,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isExportingKmz) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Proses...", fontSize = 12.sp)
+                                } else {
+                                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(17.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Ekspor KMZ", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                            }
+
+                            // Ekspor CSV
+                            Button(
+                                onClick = {
+                                    if (allPoles.isEmpty()) {
+                                        Toast.makeText(context, "Belum ada tiang untuk diekspor.", Toast.LENGTH_SHORT).show()
+                                        return@Button
+                                    }
+                                    isExportingCsv = true
+                                    val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val csvFile = exportEngine.generateAlpacaMasterCsv(allPoles, surveyorInfo = surveyorInfo)
+                                        withContext(Dispatchers.Main) {
+                                            isExportingCsv = false
+                                            exportedFileResult = csvFile
+                                        }
+                                    }
+                                },
+                                enabled = !isUploadingGDrive && !isExportingKmz && !isExportingCsv,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isExportingCsv) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Proses...", fontSize = 12.sp)
+                                } else {
+                                    Icon(Icons.Default.GridOn, contentDescription = null, modifier = Modifier.size(17.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Ekspor CSV", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
                             }
                         }
                     }
                 }
             }
 
-            // =========================================================================
-            // 3. FILTER LIST TIANG
-            // =========================================================================
+            // 3. DAFTAR TIANG LAPANGAN
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -505,42 +365,20 @@ fun ReviewExportSyncScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "DAFTAR TIANG LAPANGAN (${filteredPoles.size})",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        text = "Daftar Tiang ($totalPolesCount)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         color = Color(0xFF455A64)
                     )
-
-                    // Status Filters
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatusFilterChip(
-                            label = "Semua",
-                            selected = selectedFilterStatus == "ALL",
-                            onClick = { selectedFilterStatus = "ALL" }
-                        )
-                        StatusFilterChip(
-                            label = "Pending",
-                            selected = selectedFilterStatus == "PENDING",
-                            onClick = { selectedFilterStatus = "PENDING" }
-                        )
-                        StatusFilterChip(
-                            label = "Synced",
-                            selected = selectedFilterStatus == "SYNCED",
-                            onClick = { selectedFilterStatus = "SYNCED" }
-                        )
-                    }
                 }
             }
 
-            // =========================================================================
-            // 4. LIST TIANG SURVEI
-            // =========================================================================
-            if (filteredPoles.isEmpty()) {
+            if (allPoles.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 20.dp),
+                            .padding(vertical = 16.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color.White)
                     ) {
@@ -549,21 +387,21 @@ fun ReviewExportSyncScreen(
                                 .fillMaxWidth()
                                 .padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Inbox,
                                 contentDescription = null,
                                 tint = Color.Gray,
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(40.dp)
                             )
                             Text(
-                                text = "Belum Ada Tiang yang Disurvei",
+                                text = "Belum Ada Tiang Disurvei",
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF37474F)
                             )
                             Text(
-                                text = "Gunakan Quick Tagging Canvas untuk mulai mencatat tiang di lapangan (< 1 menit per tiang).",
+                                text = "Gunakan menu Tagging untuk mulai menandai tiang di lapangan.",
                                 fontSize = 12.sp,
                                 color = Color.Gray
                             )
@@ -571,17 +409,43 @@ fun ReviewExportSyncScreen(
                     }
                 }
             } else {
-                items(filteredPoles, key = { it.id }) { pole ->
+                items(allPoles, key = { it.id }) { pole ->
                     PoleReviewItemCard(
                         pole = pole,
                         onDeleteClick = {
-                            viewModel.repository.deletePole(pole.id)
-                            Toast.makeText(context, "Aset ${pole.effectiveAssetUid} dihapus", Toast.LENGTH_SHORT).show()
+                            poleToDelete = pole
                         }
                     )
                 }
             }
         }
+    }
+
+    // DIALOG KONFIRMASI HAPUS TIANG
+    if (poleToDelete != null) {
+        val pole = poleToDelete!!
+        AlertDialog(
+            onDismissRequest = { poleToDelete = null },
+            title = { Text("Hapus Tiang Survei?", fontWeight = FontWeight.Bold) },
+            text = { Text("Data tiang ${pole.effectiveAssetUid} akan dihapus dari penyimpanan lokal HP. Lanjutkan?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.repository.deletePole(pole.id)
+                        Toast.makeText(context, "${pole.effectiveAssetUid} dihapus", Toast.LENGTH_SHORT).show()
+                        poleToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                ) {
+                    Text("Hapus", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { poleToDelete = null }) {
+                    Text("Batal")
+                }
+            }
+        )
     }
 
     // DIALOG HASIL UPLOAD GOOGLE DRIVE
@@ -594,17 +458,17 @@ fun ReviewExportSyncScreen(
                     imageVector = Icons.Default.CloudDone,
                     contentDescription = null,
                     tint = Color(0xFF1B5E20),
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             },
             title = {
-                Text(text = "Tersimpan di Google Drive!", fontWeight = FontWeight.Bold)
+                Text(text = "Tersimpan di Google Drive", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
                         text = "File survei KMZ berhasil dikirim dan diarsipkan otomatis ke Google Drive.",
-                        fontSize = 13.sp
+                        fontSize = 12.sp
                     )
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -612,7 +476,7 @@ fun ReviewExportSyncScreen(
                         border = BorderStroke(1.dp, Color(0xFFC8E6C9)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(
                                 text = "Folder: ${result.folder_name ?: "Area_${currentUser.areaId}_${currentUser.areaLabel}"}",
                                 fontWeight = FontWeight.Bold,
@@ -623,11 +487,6 @@ fun ReviewExportSyncScreen(
                                 text = "File: ${result.file_name ?: ""}",
                                 fontSize = 11.sp,
                                 color = Color(0xFF1B5E20)
-                            )
-                            Text(
-                                text = "Root: TAGPOLLING_INVENTORY_RNIMS",
-                                fontSize = 10.sp,
-                                color = Color.Gray
                             )
                         }
                     }
@@ -641,13 +500,13 @@ fun ReviewExportSyncScreen(
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(result.file_url))
                                 context.startActivity(intent)
                             } catch (_: Exception) {
-                                Toast.makeText(context, "Tidak ada browser untuk membuka link", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Tidak ada browser untuk membuka tautan", Toast.LENGTH_SHORT).show()
                             }
                             gdriveUploadResultDialog = null
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B5E20))
                     ) {
-                        Text("Buka di Google Drive")
+                        Text("Buka Link")
                     }
                 }
             },
@@ -671,14 +530,14 @@ fun ReviewExportSyncScreen(
                 )
             },
             title = {
-                Text(text = "Gagal Kirim ke Google Drive", fontWeight = FontWeight.Bold)
+                Text(text = "Gagal Kirim ke Google Drive", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             },
             text = {
-                Text(text = gdriveUploadErrorDialog ?: "Terjadi kendala koneksi internet.")
+                Text(text = gdriveUploadErrorDialog ?: "Terjadi kendala koneksi internet.", fontSize = 13.sp)
             },
             confirmButton = {
                 Button(onClick = { gdriveUploadErrorDialog = null }) {
-                    Text("Mengerti")
+                    Text("OK")
                 }
             }
         )
@@ -698,13 +557,13 @@ fun ReviewExportSyncScreen(
                 )
             },
             title = {
-                Text(text = "Ekspor Berhasil", fontWeight = FontWeight.Bold)
+                Text(text = "Ekspor Berhasil", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "File ${exported.name} berhasil dibuat dan siap dibagikan.",
-                        fontSize = 13.sp
+                        text = "File ${exported.name} berhasil dibuat.",
+                        fontSize = 12.sp
                     )
                     Surface(
                         shape = RoundedCornerShape(6.dp),
@@ -712,8 +571,8 @@ fun ReviewExportSyncScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "Path: ${exported.absolutePath}\nUkuran: ${exported.length() / 1024} KB",
-                            fontSize = 11.sp,
+                            text = "Ukuran: ${exported.length() / 1024} KB\nPath: ${exported.absolutePath}",
+                            fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
                             color = Color.DarkGray,
                             modifier = Modifier.padding(8.dp)
@@ -735,7 +594,7 @@ fun ReviewExportSyncScreen(
                                 putExtra(Intent.EXTRA_STREAM, uri)
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            context.startActivity(Intent.createChooser(shareIntent, "Bagikan File Ekspor Alpaca"))
+                            context.startActivity(Intent.createChooser(shareIntent, "Bagikan File Survei"))
                         } catch (e: Exception) {
                             Toast.makeText(context, "Gagal membagikan: ${e.message}", Toast.LENGTH_SHORT).show()
                         }
@@ -745,65 +604,12 @@ fun ReviewExportSyncScreen(
                 ) {
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Bagikan File")
+                    Text("Bagikan")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { exportedFileResult = null }) {
                     Text("Tutup")
-                }
-            }
-        )
-    }
-
-    // DIALOG HASIL SINKRONISASI SERVER
-    if (syncResultDialogMessage != null) {
-        AlertDialog(
-            onDismissRequest = { syncResultDialogMessage = null },
-            icon = {
-                Icon(
-                    imageVector = if (syncSuccessState) Icons.Default.CheckCircle else Icons.Default.CloudOff,
-                    contentDescription = null,
-                    tint = if (syncSuccessState) Color(0xFF2E7D32) else Color(0xFFC62828),
-                    modifier = Modifier.size(36.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = if (syncSuccessState) "Sinkronisasi Berhasil" else "Hasil Sinkronisasi Server",
-                    fontWeight = FontWeight.ExtraBold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = syncResultDialogMessage ?: "",
-                        fontSize = 14.sp
-                    )
-                    if (!syncSuccessState) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = Color(0xFFFFF3E0),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Catatan: Mode Offline aktif. Seluruh data koordinat & foto tersimpan 100% aman di database Room SQLite lokal HP dan tidak akan hilang.",
-                                fontSize = 12.sp,
-                                color = Color(0xFFE65100),
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { syncResultDialogMessage = null },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (syncSuccessState) Color(0xFF2E7D32) else TelecomPrimary
-                    )
-                ) {
-                    Text("OK", fontWeight = FontWeight.Bold)
                 }
             }
         )
@@ -815,15 +621,16 @@ fun StatBox(
     label: String,
     value: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: Color
+    color: Color,
+    modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         color = color.copy(alpha = 0.08f),
-        modifier = Modifier.width(76.dp)
+        modifier = modifier
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
@@ -836,7 +643,7 @@ fun StatBox(
             Text(
                 text = value,
                 fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontWeight = FontWeight.Bold,
                 color = color
             )
             Text(
@@ -850,42 +657,21 @@ fun StatBox(
 }
 
 @Composable
-fun StatusFilterChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = if (selected) TelecomPrimary else Color.White,
-        border = if (selected) null else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCFD8DC)),
-        modifier = Modifier.clickable { onClick() }
-    ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) Color.White else Color(0xFF546E7A),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        )
-    }
-}
-
-@Composable
 fun PoleReviewItemCard(
     pole: Pole,
     onDeleteClick: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Baris 1: Urutan + Nama Tiang + Tipe (7M/9M)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -893,187 +679,83 @@ fun PoleReviewItemCard(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    // Sequence Badge
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(4.dp),
                         color = Color(0xFFE3F2FD)
                     ) {
                         Text(
                             text = "#${pole.sequence}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
                             color = TelecomPrimary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                         )
                     }
 
-                    // Asset UID Resmi Alpaca PRA: POL-MPO-[KOTA]-[SEQ:04d]
                     Text(
                         text = pole.effectiveAssetUid,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
                         color = Color(0xFF263238),
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Badges: T7/T9 Klasifikasi & Sync Status
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    // Badge T7/T9
-                    val isP7 = pole.assetClass == "pole_7"
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = if (isP7) Color(0xFFFFF3E0) else Color(0xFFE3F2FD)
-                    ) {
-                        Text(
-                            text = if (isP7) "T7 (7M)" else "T9 (9M)",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isP7) Color(0xFFE65100) else TelecomPrimary,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-
-                    // Sync Status Badge
-                    val isSynced = pole.syncStatus == "SYNCED"
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = if (isSynced) Color(0xFFE8F5E9) else Color(0xFFFFF3E0)
-                    ) {
-                        Text(
-                            text = if (isSynced) "SYNCED" else "PENDING",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSynced) Color(0xFF2E7D32) else Color(0xFFEF6C00),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider(color = Color(0xFFECEFF1))
-
-            // Koordinat & Akurasi
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = TelecomPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = "${String.format(Locale.US, "%.6f", pole.latitude)}, ${String.format(Locale.US, "%.6f", pole.longitude)}",
-                        fontSize = 12.sp,
                         fontFamily = FontFamily.Monospace,
-                        color = Color(0xFF37474F)
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
+                val isP7 = pole.assetClass == "pole_7"
                 Surface(
                     shape = RoundedCornerShape(4.dp),
-                    color = Color(0xFFF1F8E9)
+                    color = if (isP7) Color(0xFFFFF3E0) else Color(0xFFE3F2FD)
                 ) {
                     Text(
-                        text = "±${String.format(Locale.US, "%.1f", pole.accuracy)}m",
-                        fontSize = 11.sp,
+                        text = if (isP7) "7M" else "9M",
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF33691E),
+                        color = if (isP7) Color(0xFFE65100) else TelecomPrimary,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
             }
 
-            // Safety Deferral Info jika ada
-            if (pole.isSafetyDeferred) {
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = Color(0xFFFFEBEE),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = Color(0xFFC62828),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "Safety Deferral: ${pole.safetyDeferralReason ?: "Terhalang Medan"}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFC62828)
-                        )
-                    }
-                }
-            }
-
-            // Atribut & SHA-256 Photo Info
+            // Baris 2: Koordinat, Akurasi, dan Foto Geotag
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFF5F5F5)
-                    ) {
-                        Text(
-                            text = pole.ownership.displayName,
-                            fontSize = 10.sp,
-                            color = Color(0xFF616161),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = Color(0xFFF5F5F5)
-                    ) {
-                        Text(
-                            text = pole.condition.displayName,
-                            fontSize = 10.sp,
-                            color = Color(0xFF616161),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = TelecomPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "${String.format(Locale.US, "%.5f", pole.latitude)}, ${String.format(Locale.US, "%.5f", pole.longitude)} (±${String.format(Locale.US, "%.1f", pole.accuracy)}m)",
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF455A64)
+                    )
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     if (!pole.photoPath.isNullOrEmpty()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CameraAlt,
-                                contentDescription = null,
-                                tint = Color(0xFF00897B),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = if (!pole.photoSha256.isNullOrEmpty()) "SHA-256 Terverifikasi" else "Foto Terlampir",
-                                fontSize = 11.sp,
-                                color = Color(0xFF00897B),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Foto Ada",
+                            tint = Color(0xFF2E7D32),
+                            modifier = Modifier.size(15.dp)
+                        )
                     }
 
                     IconButton(
@@ -1085,6 +767,34 @@ fun PoleReviewItemCard(
                             contentDescription = "Hapus",
                             tint = Color(0xFFB0BEC5),
                             modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            // Safety Deferral Info jika ada
+            if (pole.isSafetyDeferred) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFFFFEBEE),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = Color(0xFFC62828),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Safety Deferral: ${pole.safetyDeferralReason ?: "Terhalang Medan"}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFC62828)
                         )
                     }
                 }
