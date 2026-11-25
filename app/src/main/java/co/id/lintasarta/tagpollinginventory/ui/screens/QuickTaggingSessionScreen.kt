@@ -36,12 +36,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
 import co.id.lintasarta.tagpollinginventory.camera.CameraPreview
 import co.id.lintasarta.tagpollinginventory.camera.calculateFileSha256
@@ -69,7 +73,6 @@ import org.osmdroid.views.overlay.Polyline
 import java.io.File
 import java.util.Locale
 import kotlin.math.atan2
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 enum class QuickGpsState {
@@ -134,8 +137,7 @@ fun QuickTaggingSessionScreen(
     var isSubmitting by remember { mutableStateOf(false) }
     var lastSubmittedPoleCode by remember { mutableStateOf<String?>(null) }
 
-    // State Deteksi Tiang Eksisting (< 20m)
-    var detectedExistingPole by remember { mutableStateOf<PoleEntity?>(null) }
+    // Status penggunaan tiang eksisting (aktif jika dibuka langsung dari target tiang eksisting)
     var isUsingExistingPole by remember { mutableStateOf(false) }
 
     // State Safety Deferral Dialog
@@ -201,33 +203,6 @@ fun QuickTaggingSessionScreen(
                         else -> QuickGpsState.POOR_ACCURACY
                     }
                 }
-            }
-        }
-    }
-
-    // Deteksi Tiang Eksisting Otomatis (Radius < 20 meter, khusus segmen aktif)
-    LaunchedEffect(correctedLat, correctedLng) {
-        val lat = correctedLat
-        val lng = correctedLng
-        if (lat != null && lng != null && !isUsingExistingPole) {
-            val currentSegId = activeSegment?.id
-            val cleanSegId = currentSegId?.removePrefix("SEG-")
-            val nearby = allPoles.values
-                .filter { pole ->
-                    pole.id != draftPole?.id &&
-                    !pole.id.startsWith("089") &&
-                    pole.latitude != 0.0 &&
-                    pole.longitude != 0.0 &&
-                    (currentSegId == null || pole.segmentId == currentSegId || pole.segmentId.removePrefix("SEG-") == cleanSegId)
-                }
-                .map { it to calculateRealDistanceMeters(lat, lng, it.latitude, it.longitude) }
-                .filter { it.second <= 20.0f }
-                .minByOrNull { it.second }
-
-            if (nearby != null) {
-                detectedExistingPole = nearby.first
-            } else {
-                detectedExistingPole = null
             }
         }
     }
@@ -632,88 +607,6 @@ fun QuickTaggingSessionScreen(
                 }
             }
 
-            // DETEKSI PROKSIMITAS TIANG EKSISTING (< 20m)
-            if (detectedExistingPole != null && !isUsingExistingPole) {
-                val existing = detectedExistingPole!!
-                val dist = calculateRealDistanceMeters(
-                    correctedLat ?: currentLocation.latitude,
-                    correctedLng ?: currentLocation.longitude,
-                    existing.latitude,
-                    existing.longitude
-                )
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F7FA)),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF80DEEA))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.LocationSearching,
-                                contentDescription = null,
-                                tint = Color(0xFF00838F),
-                                modifier = Modifier.size(20.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Tiang Alpaca Eksisting Terdeteksi!",
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF006064),
-                                fontSize = 14.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Aset ${existing.assetUid.ifEmpty { existing.poleCode }} berjarak ±${dist.roundToInt()} meter dari posisi surveyor.",
-                            fontSize = 12.sp,
-                            color = Color(0xFF006064)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    isUsingExistingPole = true
-                                    draftPole?.let { currDraft ->
-                                        val updated = currDraft.copy(
-                                            assetUid = existing.assetUid.ifEmpty { existing.poleCode },
-                                            poleCode = existing.poleCode,
-                                            sequence = existing.sequence,
-                                            assetClass = existing.assetClass,
-                                            equipment = existing.equipment,
-                                            isExistingPole = true
-                                        )
-                                        selectedAssetClass = existing.assetClass
-                                        selectedEquipment = existing.equipment
-                                        viewModel.repository.startDraftForPole(updated.id)
-                                    }
-                                    Toast.makeText(context, "Memperbarui Aset Eksisting: ${existing.assetUid}", Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00838F)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.height(36.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("Gunakan Tiang Eksisting", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    isUsingExistingPole = false
-                                    detectedExistingPole = null
-                                },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.height(36.dp),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                            ) {
-                                Text("Buat Tiang Baru", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                }
-            }
-
             // ==========================================
             // AKSI 1: VALIDATE POSITION (DASAR TIANG 1-3M)
             // ==========================================
@@ -729,7 +622,10 @@ fun QuickTaggingSessionScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Surface(
                                 shape = CircleShape,
                                 color = TelecomPrimary.copy(alpha = 0.1f),
@@ -744,15 +640,21 @@ fun QuickTaggingSessionScreen(
                                 Text(
                                     text = "Aksi 1: Validate Position",
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = "Berdiri di dekat dasar tiang (1–3 m)",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray
+                                    color = Color.Gray,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(8.dp))
 
                         // Status Akurasi GNSS (Hijau <= 8m, Kuning 8-15m, Merah > 15m)
                         val acc = currentLocation.accuracy
@@ -781,6 +683,7 @@ fun QuickTaggingSessionScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = statusColor,
+                                maxLines = 1,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
@@ -808,20 +711,26 @@ fun QuickTaggingSessionScreen(
                             Column(modifier = Modifier.padding(10.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = "Koordinat Tiang: ${String.format(Locale.US, "%.6f", correctedLat)}, ${String.format(Locale.US, "%.6f", correctedLng)}",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
-                                        color = Color(0xFF263238)
+                                        color = Color(0xFF263238),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
                                     if (isMoved) {
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = String.format(Locale.US, "Offset +%.1fm", distanceOffset),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
-                                            color = Color(0xFF1565C0)
+                                            color = Color(0xFF1565C0),
+                                            maxLines = 1
                                         )
                                     }
                                 }
@@ -829,12 +738,21 @@ fun QuickTaggingSessionScreen(
                                     Text(
                                         text = "GNSS Standpoint: ${String.format(Locale.US, "%.6f", capturedOriginalLat)}, ${String.format(Locale.US, "%.6f", capturedOriginalLng)} (±${String.format(Locale.US, "%.1f", currentLocation.accuracy)}m)",
                                         fontSize = 11.sp,
-                                        color = Color.Gray
+                                        color = Color.Gray,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
+
+                        val stableRoute = remember(activeSegment?.id, activeSegment?.routeCoordinates) {
+                            activeSegment?.routeCoordinates ?: emptyList()
+                        }
+                        val stableNearbyPoles = remember(allPoles) {
+                            allPoles.values.toList()
+                        }
 
                         // Peta Lapangan Lengkap: Rute Kabel Biru + Pin Eksisting (Cyan) + Pin Baru (Hijau)
                         QuickTaggingMapPreview(
@@ -842,8 +760,8 @@ fun QuickTaggingSessionScreen(
                             originalLongitude = capturedOriginalLng ?: correctedLng!!,
                             currentLatitude = correctedLat!!,
                             currentLongitude = correctedLng!!,
-                            activeSegmentRoute = activeSegment?.routeCoordinates ?: emptyList(),
-                            nearbyPoles = allPoles.values.toList(),
+                            activeSegmentRoute = stableRoute,
+                            nearbyPoles = stableNearbyPoles,
                             onLocationAdjusted = { newLat, newLng ->
                                 correctedLat = newLat
                                 correctedLng = newLng
@@ -1141,7 +1059,6 @@ fun QuickTaggingSessionScreen(
                             capturedPhotoPath = null
                             capturedPhotoSha256 = null
                             isUsingExistingPole = false
-                            detectedExistingPole = null
                             selectedEquipment = emptySet()
 
                             coroutineScope.launch {
@@ -1276,7 +1193,6 @@ fun QuickTaggingSessionScreen(
                                 isMarkerManuallyAdjusted = false
                                 capturedPhotoPath = null
                                 isUsingExistingPole = false
-                                detectedExistingPole = null
 
                                 coroutineScope.launch {
                                     scrollState.animateScrollTo(0)
@@ -1347,6 +1263,8 @@ fun QuickTaggingMapPreview(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentOnLocationAdjusted by rememberUpdatedState(onLocationAdjusted)
 
     val mapView = remember {
         val osmdroidDir = File(context.filesDir, "osmdroid").apply { if (!exists()) mkdirs() }
@@ -1357,13 +1275,56 @@ fun QuickTaggingMapPreview(
         Configuration.getInstance().osmdroidBasePath = osmdroidDir
         Configuration.getInstance().osmdroidTileCache = tilesDir
 
-        MapView(context).apply {
+        object : MapView(context) {
+            override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+                when (ev.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_POINTER_DOWN,
+                    MotionEvent.ACTION_MOVE -> {
+                        parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_CANCEL -> {
+                        parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                }
+                return super.dispatchTouchEvent(ev)
+            }
+        }.apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
+            setUseDataConnection(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
+            minZoomLevel = 4.0
+            maxZoomLevel = 20.0
             controller.setZoom(18.5)
             controller.setCenter(GeoPoint(currentLatitude, currentLongitude))
             isTilesScaledToDpi = true
+        }
+    }
+
+    var lastCenteredOriginal by remember { mutableStateOf(Pair(originalLatitude, originalLongitude)) }
+
+    DisposableEffect(lifecycleOwner, mapView) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.onDetach()
+        }
+    }
+
+    // Pusat peta ulang HANYA jika titik GNSS standpoint berubah (mis. klik Validasi Ulang Posisi)
+    LaunchedEffect(originalLatitude, originalLongitude) {
+        if (lastCenteredOriginal.first != originalLatitude || lastCenteredOriginal.second != originalLongitude) {
+            lastCenteredOriginal = Pair(originalLatitude, originalLongitude)
+            mapView.controller.setCenter(GeoPoint(originalLatitude, originalLongitude))
         }
     }
 
@@ -1416,24 +1377,34 @@ fun QuickTaggingMapPreview(
         }
         mapView.overlays.add(originalGpsMarker)
 
-        mapView.invalidate()
+        mapView.postInvalidate()
     }
 
     DisposableEffect(mapView) {
+        var lastReportedLat = currentLatitude
+        var lastReportedLng = currentLongitude
+
+        val reportCenterIfMoved = {
+            val center = mapView.mapCenter
+            if (center != null) {
+                val dLat = kotlin.math.abs(center.latitude - lastReportedLat)
+                val dLng = kotlin.math.abs(center.longitude - lastReportedLng)
+                if (dLat > 1e-7 || dLng > 1e-7) {
+                    lastReportedLat = center.latitude
+                    lastReportedLng = center.longitude
+                    currentOnLocationAdjusted(center.latitude, center.longitude)
+                }
+            }
+        }
+
         val mapListener = object : MapListener {
             override fun onScroll(event: ScrollEvent?): Boolean {
-                val center = mapView.mapCenter
-                if (center != null) {
-                    onLocationAdjusted(center.latitude, center.longitude)
-                }
+                reportCenterIfMoved()
                 return false
             }
 
             override fun onZoom(event: ZoomEvent?): Boolean {
-                val center = mapView.mapCenter
-                if (center != null) {
-                    onLocationAdjusted(center.latitude, center.longitude)
-                }
+                reportCenterIfMoved()
                 return false
             }
         }
@@ -1445,23 +1416,7 @@ fun QuickTaggingMapPreview(
 
     Box(modifier = modifier) {
         AndroidView(
-            factory = {
-                mapView.apply {
-                    setOnTouchListener { view, event ->
-                        when (event.action) {
-                            MotionEvent.ACTION_DOWN,
-                            MotionEvent.ACTION_MOVE -> {
-                                view.parent?.requestDisallowInterceptTouchEvent(true)
-                            }
-                            MotionEvent.ACTION_UP,
-                            MotionEvent.ACTION_CANCEL -> {
-                                view.parent?.requestDisallowInterceptTouchEvent(false)
-                            }
-                        }
-                        false
-                    }
-                }
-            },
+            factory = { mapView },
             modifier = Modifier.fillMaxSize()
         )
 
@@ -1519,8 +1474,8 @@ fun QuickTaggingMapPreview(
 
         SmallFloatingActionButton(
             onClick = {
-                mapView.controller.animateTo(GeoPoint(originalLatitude, originalLongitude))
-                onLocationAdjusted(originalLatitude, originalLongitude)
+                mapView.controller.setCenter(GeoPoint(originalLatitude, originalLongitude))
+                currentOnLocationAdjusted(originalLatitude, originalLongitude)
             },
             containerColor = Color.White,
             contentColor = TelecomPrimary,
