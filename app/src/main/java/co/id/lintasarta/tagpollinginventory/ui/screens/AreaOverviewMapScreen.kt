@@ -550,7 +550,7 @@ fun AreaOverviewMapScreen(
                         ) {
                             Icon(Icons.Default.AddLocationAlt, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Mulai Quick Tagging Tiang (< 1 Menit)", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                            Text("Mulai Tag Tiang", fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                         }
 
                         // TOMBOL AKSI 2: LIHAT DETAIL SEGMEN

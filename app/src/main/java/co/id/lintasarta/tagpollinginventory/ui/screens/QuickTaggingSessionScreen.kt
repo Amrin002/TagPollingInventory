@@ -213,7 +213,7 @@ fun QuickTaggingSessionScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Alpaca Field Survey",
+                title = "Form Tagging Tiang",
                 subtitle = "$segmentDisplayName • $displayAssetUid",
                 onBackClick = onBackClick,
                 networkStatus = networkStatus
@@ -277,7 +277,7 @@ fun QuickTaggingSessionScreen(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "ALPACA ASSET PRA",
+                                    text = "KODE TIANG",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.Gray,

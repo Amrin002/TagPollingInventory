@@ -358,7 +358,7 @@ fun SegmentDetailScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Mulai Quick Tagging",
+                            text = "Mulai Tag Tiang",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp
                         )

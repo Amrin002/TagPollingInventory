@@ -379,7 +379,7 @@ fun FieldMapScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Mulai Quick Tagging",
+                            text = "Mulai Tag Tiang",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.ExtraBold
                         )

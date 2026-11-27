@@ -4,9 +4,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -259,7 +261,34 @@ fun SegmentExplorerScreen(
         }
 
         // DAFTAR SEGMEN
+        // Pastikan list selalu berada di posisi paling atas saat layar dibuka, filter/pencarian berubah,
+        // atau ketika hasil hitung jarak GPS & kartu terdekat masuk di urutan awal sebelum user menggeser manual.
+        val listState = rememberLazyListState()
+        var userHasDraggedList by remember(currentUser.areaId, selectedCityChip, searchQuery) {
+            mutableStateOf(false)
+        }
+        LaunchedEffect(listState, currentUser.areaId, selectedCityChip, searchQuery) {
+            listState.interactionSource.interactions.collect { interaction ->
+                if (interaction is DragInteraction.Start) {
+                    userHasDraggedList = true
+                }
+            }
+        }
+        val topOrderSignature = remember(filteredSegments, nearestSegmentPair) {
+            Triple(
+                nearestSegmentPair?.first?.id,
+                filteredSegments.firstOrNull()?.first?.id,
+                filteredSegments.size
+            )
+        }
+        LaunchedEffect(topOrderSignature, currentUser.areaId, selectedCityChip, searchQuery) {
+            if (!userHasDraggedList) {
+                listState.scrollToItem(0)
+            }
+        }
+
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
@@ -268,7 +297,7 @@ fun SegmentExplorerScreen(
         ) {
             // SEGMEN TERDEKAT (SLIM CARD)
             nearestSegmentPair?.let { (nearestSeg, distMeters) ->
-                item {
+                item(key = "nearest_segment_banner") {
                     val distText = if (distMeters < 1000.0) {
                         "${distMeters.roundToInt()}m"
                     } else {

@@ -188,7 +188,7 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Tombol Utama: Mulai Quick Tagging
+        // Tombol Utama: Mulai Tag Tiang
         Button(
             onClick = onQuickTaggingClick,
             modifier = Modifier
@@ -205,7 +205,7 @@ fun DashboardScreen(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Mulai Quick Tagging",
+                text = "Mulai Tag Tiang",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
