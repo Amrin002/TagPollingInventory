@@ -6,15 +6,20 @@ import co.id.lintasarta.tagpollinginventory.data.model.AlpacaPraAssetDto
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
+import java.util.Base64
 import java.util.Date
 import java.util.Locale
 
@@ -601,10 +606,118 @@ object RnimsApiClient {
         return if (mpo.isNotEmpty()) mpo else all
     }
 
+    internal fun calculateBase64EncodedLength(byteCount: Long): Long {
+        if (byteCount <= 0L) return 0L
+        return ((byteCount + 2L) / 3L) * 4L
+    }
+
+    internal fun buildKmzUploadJsonEnvelope(
+        areaId: Int,
+        areaName: String,
+        segmentName: String,
+        fileName: String,
+        poleCount: Int,
+        surveyor: String
+    ): Pair<ByteArray, ByteArray> {
+        val metaMap = linkedMapOf<String, Any>(
+            "area_id" to areaId,
+            "area_name" to areaName,
+            "segment_name" to segmentName,
+            "file_name" to fileName,
+            "pole_count" to poleCount,
+            "surveyor" to surveyor
+        )
+        val metaJson = gson.toJson(metaMap)
+        val prefix = metaJson.dropLast(1) + ",\"file_base64\":\""
+        return prefix.toByteArray(Charsets.UTF_8) to "\"}".toByteArray(Charsets.UTF_8)
+    }
+
+    internal fun writeKmzUploadJsonPayload(
+        outputStream: OutputStream,
+        prefixBytes: ByteArray,
+        suffixBytes: ByteArray,
+        kmzFile: File
+    ) {
+        val bos = BufferedOutputStream(outputStream, 65536)
+        bos.write(prefixBytes)
+
+        val encoder = Base64.getEncoder()
+        // 48 KB adalah kelipatan 3 byte sehingga encoding Base64 per chunk tidak menyisipkan padding '=' di tengah
+        val buffer = ByteArray(49152)
+        BufferedInputStream(kmzFile.inputStream(), 65536).use { input ->
+            var filled = 0
+            while (true) {
+                val read = input.read(buffer, filled, buffer.size - filled)
+                if (read == -1) {
+                    if (filled > 0) {
+                        val slice = if (filled == buffer.size) buffer else buffer.copyOf(filled)
+                        bos.write(encoder.encode(slice))
+                    }
+                    break
+                }
+                filled += read
+                if (filled == buffer.size) {
+                    bos.write(encoder.encode(buffer))
+                    filled = 0
+                }
+            }
+        }
+
+        bos.write(suffixBytes)
+        bos.flush()
+    }
+
+    internal fun parseGDriveUploadResponse(responseBody: String): Result<GDriveUploadResponse> {
+        val trimmed = responseBody.trim()
+        if (trimmed.isEmpty()) {
+            return Result.failure(Exception("Server Google Drive mengembalikan respons kosong"))
+        }
+        if (trimmed.startsWith("<")) {
+            return Result.failure(Exception(extractReadableHtmlError(trimmed)))
+        }
+        val resp = gson.fromJson(trimmed, GDriveUploadResponse::class.java)
+            ?: return Result.failure(Exception("Format respons server Google Drive tidak dikenali"))
+        val ok = resp.status.equals("ok", ignoreCase = true) ||
+            resp.status.equals("success", ignoreCase = true)
+        return if (ok) {
+            Result.success(resp)
+        } else {
+            Result.failure(Exception(resp.message.ifBlank { "Upload ditolak server (status: ${resp.status})" }))
+        }
+    }
+
+    private fun extractReadableHtmlError(html: String): String {
+        val lower = html.lowercase(Locale.ROOT)
+        return when {
+            lower.contains("exceeded maximum execution time") || lower.contains("timeout") ->
+                "Waktu proses Google Apps Script habis (ukuran paket terlalu besar atau jaringan lambat)."
+            lower.contains("413") || lower.contains("too large") || lower.contains("limit exceeded") ->
+                "Ukuran paket KMZ melebihi batas upload Google Apps Script."
+            lower.contains("authorization") || lower.contains("sign in") ->
+                "Webhook Google Apps Script memerlukan izin akses ulang."
+            else -> {
+                val title = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE)
+                    .find(html)?.groupValues?.getOrNull(1)?.trim()
+                if (!title.isNullOrBlank()) "Error server Google Drive: $title"
+                else "Server Google Drive mengembalikan respons HTML error."
+            }
+        }
+    }
+
+    private fun extractReadableHttpError(code: Int, body: String): String {
+        val trimmed = body.trim()
+        return when {
+            code == 413 -> "HTTP 413: Ukuran paket KMZ melebihi batas payload server."
+            trimmed.startsWith("<") -> "HTTP $code: ${extractReadableHtmlError(trimmed)}"
+            trimmed.isNotBlank() -> "HTTP $code: ${trimmed.take(240)}"
+            else -> "HTTP $code dari server Google Drive."
+        }
+    }
+
     /**
      * Mengunggah file KMZ ke Google Drive via Google Apps Script Webhook.
-     * Tidak membutuhkan login akun Google di HP surveyor.
-     * Mengikuti HTTP 302 redirect Google Apps Script secara otomatis.
+     * Menggunakan streaming JSON + Base64 agar pemakaian RAM konstan (< 1 MB) untuk paket besar,
+     * tidak membutuhkan login akun Google di HP surveyor, dan mengikuti HTTP 302 redirect otomatis.
      */
     suspend fun uploadKmzToGoogleDrive(
         webhookUrl: String = DEFAULT_GDRIVE_WEBHOOK_URL,
@@ -613,88 +726,96 @@ object RnimsApiClient {
         areaName: String,
         segmentName: String,
         poleCount: Int,
-        surveyor: String = "Field Surveyor"
+        surveyor: String = "Field Surveyor",
+        remoteFileName: String = kmzFile.name
     ): Result<GDriveUploadResponse> = withContext(Dispatchers.IO) {
         try {
             if (!kmzFile.exists() || kmzFile.length() == 0L) {
                 return@withContext Result.failure(Exception("File KMZ tidak ditemukan atau kosong"))
             }
 
-            val fileBytes = kmzFile.readBytes()
-            val base64Content = android.util.Base64.encodeToString(fileBytes, android.util.Base64.NO_WRAP)
-
-            val payloadMap = mapOf(
-                "area_id" to areaId,
-                "area_name" to areaName,
-                "segment_name" to segmentName,
-                "file_name" to kmzFile.name,
-                "file_base64" to base64Content,
-                "pole_count" to poleCount,
-                "surveyor" to surveyor
+            val fileLen = kmzFile.length()
+            val (prefixBytes, suffixBytes) = buildKmzUploadJsonEnvelope(
+                areaId = areaId,
+                areaName = areaName,
+                segmentName = segmentName,
+                fileName = remoteFileName,
+                poleCount = poleCount,
+                surveyor = surveyor
             )
-            val jsonPayload = gson.toJson(payloadMap)
+            val totalPayloadBytes = prefixBytes.size.toLong() +
+                calculateBase64EncodedLength(fileLen) +
+                suffixBytes.size.toLong()
 
             var currentUrl = webhookUrl.trim()
             val maxRedirects = 5
             var redirectCount = 0
 
-            var connection: HttpURLConnection? = null
-            var responseBody = ""
-            var responseCode = -1
-
             while (redirectCount < maxRedirects) {
-                val urlObj = URL(currentUrl)
-                connection = (urlObj.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 45000
-                    readTimeout = 90000
-                    setRequestProperty("User-Agent", "TagPolling-Android")
-                }
+                var currentConnection: HttpURLConnection? = null
+                try {
+                    val urlObj = URL(currentUrl)
+                    currentConnection = (urlObj.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 30_000
+                        readTimeout = 180_000
+                        instanceFollowRedirects = false
+                        setRequestProperty("User-Agent", "TagPolling-Android")
+                    }
 
-                if (redirectCount == 0) {
-                    connection.apply {
-                        requestMethod = "POST"
-                        doOutput = true
-                        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                    if (redirectCount == 0) {
+                        currentConnection.apply {
+                            requestMethod = "POST"
+                            doOutput = true
+                            setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                            setFixedLengthStreamingMode(totalPayloadBytes)
+                        }
+                        currentConnection.outputStream.use { os ->
+                            writeKmzUploadJsonPayload(os, prefixBytes, suffixBytes, kmzFile)
+                        }
+                    } else {
+                        currentConnection.requestMethod = "GET"
                     }
-                    connection.outputStream.use { os ->
-                        os.write(jsonPayload.toByteArray(Charsets.UTF_8))
-                        os.flush()
-                    }
-                } else {
-                    connection.apply {
-                        requestMethod = "GET"
-                    }
-                }
 
-                responseCode = connection.responseCode
+                    val responseCode = currentConnection.responseCode
 
-                // Google Apps Script redirects with 302 or 303 to script.googleusercontent.com
-                if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
-                    responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
-                    responseCode == HttpURLConnection.HTTP_SEE_OTHER ||
-                    responseCode == 307 || responseCode == 308) {
-                    val location = connection.getHeaderField("Location")
-                    if (!location.isNullOrBlank()) {
-                        currentUrl = location
-                        redirectCount++
-                        connection.disconnect()
-                        continue
+                    // Google Apps Script redirects with 302 or 303 to script.googleusercontent.com
+                    if (responseCode == HttpURLConnection.HTTP_MOVED_TEMP ||
+                        responseCode == HttpURLConnection.HTTP_MOVED_PERM ||
+                        responseCode == HttpURLConnection.HTTP_SEE_OTHER ||
+                        responseCode == 307 || responseCode == 308
+                    ) {
+                        val location = currentConnection.getHeaderField("Location")
+                        if (!location.isNullOrBlank()) {
+                            currentUrl = location
+                            redirectCount++
+                            continue
+                        }
                     }
+
+                    if (responseCode in 200..299) {
+                        val responseBody = currentConnection.inputStream.bufferedReader().use { it.readText() }
+                        return@withContext parseGDriveUploadResponse(responseBody)
+                    } else {
+                        val errBody = currentConnection.errorStream?.bufferedReader()?.use { it.readText() }
+                            ?: currentConnection.inputStream?.bufferedReader()?.use { it.readText() }
+                            ?: ""
+                        return@withContext Result.failure(Exception(extractReadableHttpError(responseCode, errBody)))
+                    }
+                } finally {
+                    currentConnection?.disconnect()
                 }
-                break
             }
 
-            if (responseCode in 200..299) {
-                responseBody = connection?.inputStream?.bufferedReader()?.use { it.readText() } ?: ""
-                val resp = gson.fromJson(responseBody, GDriveUploadResponse::class.java)
-                Result.success(resp)
-            } else {
-                val errBody = connection?.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
-                Result.failure(Exception("HTTP $responseCode: $errBody"))
+            Result.failure(Exception("Terlalu banyak redirect dari server Google Drive ($maxRedirects kali)"))
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (t: Throwable) {
+            t.printStackTrace()
+            val message = when (t) {
+                is OutOfMemoryError -> "Memori HP tidak mencukupi saat mengunggah KMZ."
+                else -> t.message ?: "Gagal menghubungi server Google Drive"
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            Result.failure(e)
+            Result.failure(Exception(message, t))
         }
     }
 }

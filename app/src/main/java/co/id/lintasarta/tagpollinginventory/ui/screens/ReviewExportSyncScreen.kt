@@ -287,16 +287,21 @@ fun ReviewExportSyncScreen(
                                     }
                                     isExportingKmz = true
                                     val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val kmzFile = exportEngine.generateAlpacaMasterKmz(
-                                            poles = allPoles,
-                                            segmentName = project.name,
-                                            importedRoute = activeRoute,
-                                            surveyorInfo = surveyorInfo
-                                        )
-                                        withContext(Dispatchers.Main) {
-                                            isExportingKmz = false
+                                    coroutineScope.launch {
+                                        try {
+                                            val kmzFile = withContext(Dispatchers.IO) {
+                                                exportEngine.generateAlpacaMasterKmz(
+                                                    poles = allPoles,
+                                                    segmentName = project.name,
+                                                    importedRoute = activeRoute,
+                                                    surveyorInfo = surveyorInfo
+                                                )
+                                            }
                                             exportedFileResult = kmzFile
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Gagal ekspor KMZ: ${e.message ?: "Error"}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isExportingKmz = false
                                         }
                                     }
                                 },
@@ -327,11 +332,16 @@ fun ReviewExportSyncScreen(
                                     }
                                     isExportingCsv = true
                                     val surveyorInfo = "Di-tag oleh : ${currentUser.displayName.ifBlank { "Field Surveyor" }} (${viewModel.getDeviceModel()})"
-                                    coroutineScope.launch(Dispatchers.IO) {
-                                        val csvFile = exportEngine.generateAlpacaMasterCsv(allPoles, surveyorInfo = surveyorInfo)
-                                        withContext(Dispatchers.Main) {
-                                            isExportingCsv = false
+                                    coroutineScope.launch {
+                                        try {
+                                            val csvFile = withContext(Dispatchers.IO) {
+                                                exportEngine.generateAlpacaMasterCsv(allPoles, surveyorInfo = surveyorInfo)
+                                            }
                                             exportedFileResult = csvFile
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Gagal ekspor CSV: ${e.message ?: "Error"}", Toast.LENGTH_LONG).show()
+                                        } finally {
+                                            isExportingCsv = false
                                         }
                                     }
                                 },

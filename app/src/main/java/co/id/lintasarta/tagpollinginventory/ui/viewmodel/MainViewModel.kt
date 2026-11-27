@@ -272,9 +272,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Preload bundled segments offline untuk area aktif
+        // Preload bundled segments offline untuk area aktif (di IO thread agar tidak memblokir UI startup)
         viewModelScope.launch {
-            val allBundled = RnimsApiClient.loadBundledSegments(application)
+            val allBundled = withContext(Dispatchers.IO) {
+                RnimsApiClient.loadBundledSegments(application)
+            }
             if (allBundled.isNotEmpty()) {
                 val areaId = currentUser.value.areaId
                 val forArea = allBundled.filter { it.area_id == areaId }
@@ -591,12 +593,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Mengunggah hasil survei lapangan dalam format KMZ resmi ke Google Drive via Apps Script Webhook.
-     * Tidak membutuhkan login Google di HP dan otomatis masuk ke folder Area_{id}_{areaLabel}.
+     * Otomatis mengoptimasi foto KMZ, memecah batch jika ukuran survei sangat besar (> 5 MB),
+     * dan tidak membutuhkan login Google di HP surveyor.
      */
     fun uploadSurveyToGoogleDrive(
         targetPoles: List<Pole>? = null,
         onComplete: (Boolean, GDriveUploadResponse?, String) -> Unit = { _, _, _ -> }
     ) {
+        if (_isUploadingGDrive.value) return
         viewModelScope.launch {
             val polesToUpload = targetPoles ?: poles.value.values.toList()
             if (polesToUpload.isEmpty()) {
@@ -607,61 +611,126 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             _isUploadingGDrive.value = true
-            _gdriveUploadMessage.value = "Membuat paket KMZ survei (koordinat, rute kabel FO, dan foto)..."
+            _gdriveUploadMessage.value = "Mengoptimasi & mengemas KMZ (${polesToUpload.size} tiang)..."
 
-            val areaId = currentUser.value.areaId
-            val areaLabel = currentUser.value.areaLabel
-            val activeSeg = repository.project.value.segments.find { it.id == selectedSegmentId.value }
-            val segName = activeSeg?.name ?: "SEGMENT_ALL"
-
-            val surveyorName = currentUser.value.displayName.ifBlank { "Field Surveyor" }
-            val deviceModel = getDeviceModel()
-            val surveyorInfo = "Di-tag oleh : $surveyorName ($deviceModel)"
-
-            // 1. Generate KMZ
-            val kmzTimestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-            val cleanSurveyor = surveyorName.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_]"), "")
-            val kmzFileName = "SURVEY_${areaLabel}_${segName}_${cleanSurveyor}_$kmzTimestamp.kmz"
-            val tempDir = File(getApplication<Application>().cacheDir, "gdrive_uploads").apply { if (!exists()) mkdirs() }
-            val tempKmz = File(tempDir, kmzFileName)
-
-            val generatedKmz = withContext(Dispatchers.IO) {
-                exportEngine.generateAlpacaMasterKmz(
-                    poles = polesToUpload,
-                    segmentName = "${project.value.name} - $segName",
-                    importedRoute = activeRoute.value,
-                    surveyorInfo = surveyorInfo,
-                    targetFile = tempKmz
-                )
+            val tempDir = File(getApplication<Application>().cacheDir, "gdrive_uploads").apply {
+                if (!exists()) mkdirs()
             }
+            var batches = emptyList<co.id.lintasarta.tagpollinginventory.export.KmzUploadBatch>()
 
-            val sizeKb = generatedKmz.length() / 1024
-            _gdriveUploadMessage.value = "Mengunggah $kmzFileName ($sizeKb KB) ke Google Drive Area $areaId ($areaLabel)..."
-
-            val res = RnimsApiClient.uploadKmzToGoogleDrive(
-                webhookUrl = _gdriveWebhookUrl.value,
-                kmzFile = generatedKmz,
-                areaId = areaId,
-                areaName = areaLabel,
-                segmentName = segName,
-                poleCount = polesToUpload.size,
-                surveyor = "$surveyorName ($deviceModel)"
-            )
-
-            _isUploadingGDrive.value = false
-
-            res.onSuccess { uploadResp ->
-                _gdriveUploadMessage.value = "Berhasil: ${uploadResp.message} (${uploadResp.folder_name}/${uploadResp.file_name})"
-                // Tandai tiang yang diupload sebagai SYNCED
-                viewModelScope.launch(Dispatchers.IO) {
-                    val syncedIds = polesToUpload.map { it.id }
-                    repository.markPolesAsSynced(syncedIds)
+            try {
+                withContext(Dispatchers.IO) {
+                    tempDir.listFiles()?.forEach { it.delete() }
                 }
-                onComplete(true, uploadResp, uploadResp.message)
-            }.onFailure { err ->
-                val errMsg = err.message ?: "Gagal upload ke Google Drive"
+
+                val areaId = currentUser.value.areaId
+                val areaLabel = currentUser.value.areaLabel
+                val hasActiveSegPoles = polesToUpload.any { it.segmentId == selectedSegmentId.value }
+                val activeSeg = if (hasActiveSegPoles) {
+                    repository.project.value.segments.find { it.id == selectedSegmentId.value }
+                } else {
+                    val firstSegId = polesToUpload.firstOrNull()?.segmentId
+                    repository.project.value.segments.find { it.id == firstSegId }
+                }
+                val segName = activeSeg?.name ?: polesToUpload.firstOrNull()?.routeName?.ifBlank { null } ?: "SEGMENT_ALL"
+                val cleanSegName = segName.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+
+                val surveyorName = currentUser.value.displayName.ifBlank { "Field Surveyor" }
+                val deviceModel = getDeviceModel()
+                val surveyorInfo = "Di-tag oleh : $surveyorName ($deviceModel)"
+
+                val kmzTimestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                val cleanSurveyor = surveyorName.replace(" ", "_").replace(Regex("[^a-zA-Z0-9_]"), "")
+                val filePrefix = "SURVEY_${areaLabel}_${cleanSegName}_${cleanSurveyor}_$kmzTimestamp"
+
+                batches = withContext(Dispatchers.IO) {
+                    exportEngine.buildGDriveKmzBatches(
+                        poles = polesToUpload,
+                        segmentName = "${project.value.name} - $segName",
+                        importedRoute = activeRoute.value,
+                        surveyorInfo = surveyorInfo,
+                        workDir = tempDir,
+                        baseFileNamePrefix = filePrefix
+                    )
+                }
+
+                var uploadedPartsCount = 0
+                var uploadedPolesCount = 0
+                var lastSuccessResp: GDriveUploadResponse? = null
+                val uploadedFileNames = mutableListOf<String>()
+                var failureMessage: String? = null
+
+                for (batch in batches) {
+                    val fileBytes = batch.file.length()
+                    val sizeLabel = if (fileBytes >= 1024L * 1024L) {
+                        String.format(Locale.US, "%.1f MB", fileBytes / (1024.0 * 1024.0))
+                    } else {
+                        "${(fileBytes / 1024L).coerceAtLeast(1L)} KB"
+                    }
+
+                    _gdriveUploadMessage.value = if (batch.totalParts > 1) {
+                        "Mengunggah Bagian ${batch.partIndex}/${batch.totalParts} (${batch.poles.size} tiang, $sizeLabel)..."
+                    } else {
+                        "Mengunggah ${batch.file.name} ($sizeLabel) ke Area $areaId ($areaLabel)..."
+                    }
+
+                    val res = RnimsApiClient.uploadKmzToGoogleDrive(
+                        webhookUrl = _gdriveWebhookUrl.value,
+                        kmzFile = batch.file,
+                        areaId = areaId,
+                        areaName = areaLabel,
+                        segmentName = segName,
+                        poleCount = batch.poles.size,
+                        surveyor = "$surveyorName ($deviceModel)"
+                    )
+
+                    val err = res.exceptionOrNull()
+                    if (err != null) {
+                        failureMessage = err.message ?: "Gagal upload ke Google Drive"
+                        break
+                    }
+
+                    val resp = res.getOrNull()!!
+                    lastSuccessResp = resp
+                    uploadedPartsCount++
+                    uploadedPolesCount += batch.poles.size
+                    uploadedFileNames.add(resp.file_name ?: batch.file.name)
+
+                    withContext(Dispatchers.IO) {
+                        repository.markPolesAsSynced(batch.poles.map { it.id })
+                    }
+                }
+
+                if (failureMessage == null && lastSuccessResp != null) {
+                    val finalResp = if (batches.size == 1) {
+                        lastSuccessResp
+                    } else {
+                        lastSuccessResp.copy(
+                            message = "Berhasil mengunggah $uploadedPartsCount bagian KMZ (${uploadedPolesCount} tiang) ke Google Drive",
+                            file_name = uploadedFileNames.joinToString("\n")
+                        )
+                    }
+                    _gdriveUploadMessage.value = "Berhasil: ${finalResp.message}"
+                    onComplete(true, finalResp, finalResp.message)
+                } else {
+                    val detailedError = if (uploadedPartsCount > 0) {
+                        "Terkirim $uploadedPartsCount/${batches.size} bagian ($uploadedPolesCount tiang), namun gagal pada bagian berikutnya: $failureMessage"
+                    } else {
+                        failureMessage ?: "Gagal upload ke Google Drive"
+                    }
+                    _gdriveUploadMessage.value = "Gagal upload: $detailedError"
+                    onComplete(false, null, detailedError)
+                }
+            } catch (e: Exception) {
+                val errMsg = e.message ?: "Gagal menyiapkan atau mengirim KMZ ke Google Drive"
                 _gdriveUploadMessage.value = "Gagal upload: $errMsg"
                 onComplete(false, null, errMsg)
+            } finally {
+                withContext(Dispatchers.IO) {
+                    batches.forEach { it.file.delete() }
+                    tempDir.listFiles()?.forEach { it.delete() }
+                }
+                _isUploadingGDrive.value = false
             }
         }
     }

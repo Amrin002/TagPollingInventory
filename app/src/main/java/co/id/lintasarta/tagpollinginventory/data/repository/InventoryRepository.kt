@@ -10,11 +10,13 @@ import co.id.lintasarta.tagpollinginventory.network.AreaDto
 import co.id.lintasarta.tagpollinginventory.network.RnimsApiClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -62,10 +64,13 @@ class InventoryRepository(private val context: Context) {
             oldDataFile.delete()
         }
 
-        // Observasi daftar Segmen dari SQLite Room, difilter berdasarkan areaId operasional yang aktif (Group by Area ID)
+        // Observasi daftar Segmen dari SQLite Room langsung terfilter per areaId di query SQLite
         scope.launch {
-            combine(dao.getAllSegmentsFlow(), _selectedAreaId) { allSegs, areaId ->
-                val filtered = if (areaId > 0) allSegs.filter { it.areaId == areaId } else allSegs
+            @OptIn(ExperimentalCoroutinesApi::class)
+            _selectedAreaId.flatMapLatest { areaId ->
+                val segFlow = if (areaId > 0) dao.getSegmentsByAreaFlow(areaId) else dao.getAllSegmentsFlow()
+                segFlow.map { segs -> segs to areaId }
+            }.collect { (filtered, areaId) ->
                 val totalPoles = filtered.sumOf { it.totalPoles }
                 val completedPoles = filtered.sumOf { it.completedPoles }
                 val conflictPoles = filtered.sumOf { it.conflictPoles }
@@ -89,7 +94,7 @@ class InventoryRepository(private val context: Context) {
                 if (filtered.isNotEmpty() && (_selectedSegmentId.value.isEmpty() || filtered.none { it.id == _selectedSegmentId.value })) {
                     _selectedSegmentId.value = filtered.first().id
                 }
-            }.collect { }
+            }
         }
 
         // Pembersihan otomatis seluruh data dummy/ujicoba Tiakur (PO 089) dari SQLite Room
@@ -950,17 +955,22 @@ class InventoryRepository(private val context: Context) {
             )
         }
 
-        dao.insertSegments(updatedSegments)
+        val changedSegments = updatedSegments.filterIndexed { index, updated -> updated != allSegments[index] }
+        if (changedSegments.isNotEmpty()) {
+            dao.insertSegments(changedSegments)
+        }
 
-        val totalPoles = updatedSegments.sumOf { it.totalPoles }
-        val completedPoles = updatedSegments.sumOf { it.completedPoles }
-        val conflictPoles = updatedSegments.sumOf { it.conflictPoles }
+        val activeAreaId = _selectedAreaId.value
+        val areaSegments = if (activeAreaId > 0) updatedSegments.filter { it.areaId == activeAreaId } else updatedSegments
+        val totalPoles = areaSegments.sumOf { it.totalPoles }
+        val completedPoles = areaSegments.sumOf { it.completedPoles }
+        val conflictPoles = areaSegments.sumOf { it.conflictPoles }
         val totalP7 = allPoles.count { it.assetClass == "pole_7" }
         val totalP9 = allPoles.count { it.assetClass == "pole_9" }
 
         val currentProj = _project.value
         _project.value = currentProj.copy(
-            segments = updatedSegments,
+            segments = areaSegments,
             totalPoles = totalPoles,
             completedPoles = completedPoles,
             conflictPoles = conflictPoles,
